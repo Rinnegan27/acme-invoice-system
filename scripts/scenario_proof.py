@@ -163,6 +163,8 @@ def main() -> int:
                 results.append(entry)
                 all_ok = False
                 continue
+            # Reseed stock between rows so post-pay decrements do not poison later cases.
+            pipe.inventory.reseed()
             actual = _run_one(pipe, row.file_name)
             passed, message = _row_ok(row, actual)
             if not passed:
