@@ -10,19 +10,33 @@ The public GitHub repository is [Rinnegan27/galatiq-invoice-system](https://gith
 
 Do these steps in order.
 
-### 1. Install
+### 1. First-time build (install + all checks)
+
+Install [uv](https://docs.astral.sh/uv/) first.
+
+Then run one command from the repo root:
 
 ```bash
-# Install uv: https://docs.astral.sh/uv/
 cd galatiq-invoice-system
-uv sync --extra dev
+make
 ```
 
-Pip fallback (no lockfile):
+`make` and `make build` do the same work:
+
+1. Sync deps (`uv sync --extra dev`)
+2. Lint with ruff (check + format check)
+3. Run all offline tests
+4. Run the case scenario proof (`docs/scenario_proof.*`)
+
+If any step fails, the build stops.
+
+Pip fallback (no lockfile; then run checks by hand):
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+make quality
+make scenario-proof
 ```
 
 ### 2. Set the environment
@@ -114,21 +128,41 @@ uv run uvicorn web.app:app --reload --port 8000
 
 ## Aether Helix quality gates
 
+Default build (first time and every full check):
+
+```bash
+make
+# same as:
+make build
+```
+
+Faster re-check after deps are already installed:
+
+```bash
+make check
+# same as:
+make quality
+```
+
+Other targets:
+
 ```bash
 make sync
 make lint
 make smoke
-make quality
 make report
+make scenario-proof
 ```
 
 | Gate | Command | Coverage |
 |---|---|---|
+| Build (default) | `make` / `make build` | Sync + lint + offline tests + scenario proof |
+| Check | `make check` / `make quality` | Lint + offline tests (no sync) |
 | Smoke | `make smoke` | Fast CLI + case-sim stub |
 | Black box | `make blackbox` | Case sim, corpus, e2e |
 | White box | `make whitebox` | Parsers, policy, hardening |
 | Lint | `make lint` | Ruff check + format |
-| Full | `make quality` | Lint + all offline tests |
+| Scenario proof | `make scenario-proof` | Case README invoice matrix |
 
 **Aether Helix** is the in-repo quality persona. It is a project nickname for gates. It is not a product role.
 
@@ -261,7 +295,7 @@ data/invoices/              # 100-file corpus
 docs/                       # Scenario proof + evaluator artifacts
 tests/                      # smoke / black_box / white_box
 uv.lock                     # Locked deps
-Makefile                    # sync, lint, quality, scenario-proof
+Makefile                    # default: make / make build (sync + all checks)
 CLAUDE.md                   # Coding rules
 ```
 
