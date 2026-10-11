@@ -275,8 +275,30 @@ docs/                       # Scenario proof + evaluator artifacts
 tests/                      # smoke / black_box / white_box
 uv.lock                     # Locked deps
 Makefile                    # default: make / make build (sync + all checks)
+CHANGELOG.md                # Release history
 CLAUDE.md                   # Coding rules
 ```
+
+## Tech used
+
+| Layer | Tech |
+|---|---|
+| Language | Python 3.11+ |
+| Package / lock | `uv`, `pyproject.toml`, `uv.lock` |
+| Domain models | Pydantic v2 |
+| Orchestration | Custom SQLite stage queues (not LangGraph) |
+| Inventory / state | SQLite |
+| LLM (live) | xAI Grok via OpenAI-compatible API (`openai`, `https://api.x.ai/v1`) |
+| LLM (offline) | Deterministic stub parsers |
+| PDF text | pdfplumber |
+| HTTP | httpx |
+| Product UI | FastAPI, uvicorn, Jinja2, python-multipart |
+| Data helpers | pandas |
+| Config | python-dotenv |
+| Quality | pytest, ruff, Makefile, GitHub Actions |
+| Payment fence | HMAC `PaymentPermit` (stdlib `hmac` / `hashlib`) |
+
+See [CHANGELOG.md](CHANGELOG.md) for version history. GitHub Releases hold the same notes.
 
 ## Evaluation criteria
 
@@ -308,5 +330,12 @@ This build covers the full Galatiq case surface.
 | Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
 | Fail-closed extraction | Missing totals and bad keys do not silently succeed |
 | Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
+
+## Changelog and releases
+
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Releases: https://github.com/Rinnegan27/galatiq-invoice-system/releases
+
+Current package version: **1.1.1** (`pyproject.toml` and `invoice_automation.__version__`).
 
 See [CLAUDE.md](CLAUDE.md) for coding rules.
