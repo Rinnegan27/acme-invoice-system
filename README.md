@@ -74,23 +74,7 @@ You get a short JSON summary. Add `-v` for the full audit.
 
 Use these steps for a fast review.
 
-### A. Offline happy path
-
-```bash
-uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
-```
-
-Expect status `paid` for INV-1001.
-
-### B. Case Simulation Contract
-
-```bash
-uv run python main.py --sim=case --llm=stub
-```
-
-Expect all W1–W10 workflows to pass.
-
-### C. Optional live Grok
+### A. Live Grok
 
 1. Set a real key in `.env`: `XAI_API_KEY=xai-...`
 2. Run:
@@ -100,6 +84,22 @@ uv run python main.py --invoice_path=data/invoices/invoice1.txt
 ```
 
 The default engine is Grok. If the key is missing or bad, the CLI asks for a key or offline stub.
+
+### B. Offline happy path
+
+```bash
+uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
+```
+
+Expect status `paid` for INV-1001.
+
+### C. Case Simulation Contract
+
+```bash
+uv run python main.py --sim=case --llm=stub
+```
+
+Expect all W1–W10 workflows to pass.
 
 ### Scenario proof artifact
 
