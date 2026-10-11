@@ -297,6 +297,7 @@ CLAUDE.md                   # Coding rules
 | Config | python-dotenv |
 | Quality | pytest, ruff, Makefile, GitHub Actions |
 | Payment fence | HMAC `PaymentPermit` (stdlib `hmac` / `hashlib`) |
+| Docs style | ASD-STE for README, comments, and operator text; NumPy docstrings for public APIs |
 
 See [CHANGELOG.md](CHANGELOG.md) for version history. GitHub Releases hold the same notes.
 
