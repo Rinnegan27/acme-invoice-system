@@ -60,7 +60,7 @@ uv run uvicorn web.app:app --reload --port 8000
 # Case Lab: http://localhost:8000/sim
 ```
 
-### 5. Quality checks
+### 5. Aether Helix quality gates
 
 ```bash
 make sync
@@ -71,6 +71,29 @@ make report
 ```
 
 ---
+
+## How this solution meets the requirements
+
+This build covers the full Galatiq case surface — not a demo stub.
+
+| Requirement | How we deliver it |
+|---|---|
+| Four stages: Ingestion → Validation → Approval → Payment | Durable SQLite stage queues + workers in `invoice_automation/agents/` |
+| Inventory seed (WidgetA/B, GadgetX, FakeItem) | `case_brief.INVENTORY_SEED` reseeds on pipeline start |
+| Scenario table (1001, 1002, 1003, 1008, 1009, 1016, …) | Parsers + `--sim=case` (W1–W10) + 100-file corpus |
+| `mock_payment(vendor, amount)` | Case-brief mock → `MockPaymentGateway` + payment saga |
+| Grok / offline LLM | Default CLI = Grok; `--llm=stub` for CI; missing/bad key prompts for key or offline |
+| CLI contract path | `python main.py --invoice_path=data/invoices/invoice1.txt` |
+| Structured audit trail | JSONL events, outbox publish, metrics snapshot |
+| Offline / no live payment rails | Stub LLM + mock gateway; no external pay APIs |
+| Multi-format corpus | txt / json / csv / xml / pdf under `data/invoices/` |
+| High-value scrutiny | Stub/Grok reflection over $10k; Control Centre Approvals desk |
+| Human-in-the-loop | Exceptions, escalate, approve/decline in FastAPI `web/` |
+| Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
+| Fail-closed extraction | Missing totals and bad keys do not silently “succeed” |
+| Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
+
+**Aether Helix** is the in-repo quality persona: smoke, black-box, white-box, lint, and the one-page `make report` summary. It is a project nickname for gates — not a product role.
 
 ## What this system does
 
@@ -90,19 +113,19 @@ This secret signs **PaymentPermit** tokens. The LLM cannot authorize pay alone.
 | Placeholder or too short | Reject. |
 | Set to a strong value | Use it. |
 
-### CLI vs VP desk
+### CLI vs Approvals desk
 
 The CLI has no interactive human reject.
 
 - Clean invoice ≤ $10k → auto-approve and pay (stub)
-- Clean invoice > $10k → stub VP rules may approve or reject
+- Clean invoice > $10k → stub high-value rules may approve or reject
 - Validation issues → reject
 
-Human escalate / reject / VP pay is in the Control Centre only.
+Human escalate / reject / Approvals-desk pay is in the Control Centre only.
 
 Role switcher in the UI is **demo auth only** (unsigned cookie).
 
-## Quality gates (Meta VP)
+## Aether Helix quality gates
 
 | Gate | Command | Coverage |
 |---|---|---|
@@ -112,7 +135,7 @@ Role switcher in the UI is **demo auth only** (unsigned cookie).
 | Lint | `make lint` | Ruff check + format |
 | Full | `make quality` | Lint + all offline tests |
 
-## Case brief compliance
+## Case brief compliance (detail)
 
 Mapped 1:1 to [galatiq-case-invoices](https://github.com/galatiq-ai/galatiq-case-invoices):
 
@@ -132,7 +155,7 @@ Mapped 1:1 to [galatiq-case-invoices](https://github.com/galatiq-ai/galatiq-case
 
 1. Open **Capture**. Process samples or upload files.
 2. Open **Exceptions**. Fix fields. Approve and pay, or escalate.
-3. Switch **Working as** to **VP Approver**. Open **Approvals**.
+3. Switch **Working as** to **Approver**. Open **Approvals**.
 4. Open **Audit** for the ledger.
 
 Case Lab: [http://localhost:8000/sim](http://localhost:8000/sim) (not in product nav).
@@ -169,17 +192,17 @@ data/invoices/              # 100-file corpus
 tests/                      # smoke / black_box / white_box
 uv.lock                     # Locked deps
 Makefile                    # sync, lint, quality
-CLAUDE.md                   # Coding rules (Karpathy + Galatiq)
+CLAUDE.md                   # Coding rules
 ```
 
 ## Evaluation criteria
 
 | Criterion | Evidence |
 |---|---|
-| Functionality | Case sim; CLI + workbench |
-| Code quality | Protocols, ruff, hardening tests |
-| Agentic sophistication | Multi-stage agents, optional Grok |
+| Functionality | Case sim; CLI + workbench; full requirement map above |
+| Code quality | Protocols, ruff, Aether Helix gates |
+| Agentic sophistication | Multi-stage agents, optional Grok, self-correction |
 | Shipping mindset | Offline-first; Control Centre UI |
-| Above/Beyond | Workbench, Case Lab, PaymentPermit |
+| Above and beyond | Workbench, Case Lab, PaymentPermit, 100-file corpus |
 
 See [CLAUDE.md](CLAUDE.md) for coding rules.

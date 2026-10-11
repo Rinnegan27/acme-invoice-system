@@ -1,4 +1,4 @@
-"""Fast Meta VP smoke gate: CLI invoice1 stub + case sim stub."""
+"""Fast Aether Helix smoke gate: CLI invoice1 stub + case sim stub."""
 
 from __future__ import annotations
 

@@ -43,7 +43,7 @@ testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
 markers = [
-  "smoke: fast CLI + case-sim stub checks for Meta VP smoke gate",
+  "smoke: fast CLI + case-sim stub checks for Aether Helix smoke gate",
   "black_box: end-to-end case sim, corpus, and e2e contracts",
   "white_box: unit tests for parsers, policy, domain, hardening",
   "live_grok: hits live xAI API (requires real XAI_API_KEY)",

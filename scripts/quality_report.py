@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-page quality summary for Meta VP review."""
+"""One-page Aether Helix quality summary."""
 
 from __future__ import annotations
 
@@ -67,7 +67,8 @@ def main() -> int:
 
     print()
     overall = 0 if code_ruff == 0 and code_fmt == 0 else 1
-    print(f"quality_report: {'READY' if overall == 0 else 'NEEDS FIX'}")
+    label = "AETHER HELIX READY" if overall == 0 else "AETHER HELIX NEEDS FIX"
+    print(f"quality_report: {label}")
     return overall
 
 

@@ -1,4 +1,4 @@
-"""Guards for VP-review hardening nits."""
+"""Guards for pipeline hardening nits (fail-closed parsers, permit secret, no core/)."""
 
 from __future__ import annotations
 

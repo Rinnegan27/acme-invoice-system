@@ -75,3 +75,4 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Prefer `uv sync --extra dev` and Makefile targets (`make lint`, `make quality`).
 - Operator docs use short ASD-STE sentences. Public APIs use NumPy docstrings. Do not over-document private helpers.
 - Version lives in `pyproject.toml` and `invoice_automation.__version__` (keep them equal).
+- Quality persona nickname is **Aether Helix** (smoke / black_box / white_box / report). Do not use employer or real-org review labels in docs.
