@@ -444,6 +444,22 @@ class PaymentWorker:
                 idempotency_key=f"pay:{payment_id}",
                 items=invoice.items,
             )
+            # Saga returned reconcile. Do not mark paid. Do not consume the permit.
+            if result.status == "reconcile":
+                self.events.emit(
+                    "PaymentStockReconcile",
+                    correlation_id,
+                    invoice.invoice_id,
+                    {
+                        "error": "stock_reconcile_required:replay",
+                        "transaction_id": result.transaction_id,
+                    },
+                    stage=StageName.PAYMENT.value,
+                )
+                self.metrics.incr_rate(StageName.PAYMENT.value, "reconcile")
+                self.metrics.incr_outcome("reconcile")
+                self.queue.fail(msg["id"], reason="stock_reconcile_required:replay")
+                return True
             engine.verify_permit(
                 permit_data,
                 invoice,
@@ -465,16 +481,25 @@ class PaymentWorker:
             self.metrics.incr_rate(StageName.PAYMENT.value, "paid")
             self.metrics.incr_outcome("paid")
             self.queue.ack(msg["id"])
-        except Exception as exc:  # noqa: BLE001 - always emit PaymentFailed for CLI status
+        except Exception as exc:  # noqa: BLE001 - always emit terminal payment event
             self.metrics.incr_error(StageName.PAYMENT.value, type(exc).__name__)
+            err = str(exc)
+            event_type = (
+                "PaymentStockReconcile"
+                if err.startswith("stock_reconcile_required:")
+                else "PaymentFailed"
+            )
+            if event_type == "PaymentStockReconcile":
+                self.metrics.incr_rate(StageName.PAYMENT.value, "reconcile")
+                self.metrics.incr_outcome("reconcile")
             self.events.emit(
-                "PaymentFailed",
+                event_type,
                 correlation_id,
                 invoice_id,
-                {"error": str(exc)},
+                {"error": err},
                 stage=StageName.PAYMENT.value,
             )
-            self.queue.fail(msg["id"], reason=str(exc))
+            self.queue.fail(msg["id"], reason=err)
         finally:
             self.metrics.observe_latency(StageName.PAYMENT.value, time.perf_counter() - started)
         return True

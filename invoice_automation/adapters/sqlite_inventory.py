@@ -1,4 +1,4 @@
-"""SQLite inventory store with stock, unit-price catalog, and PO lines."""
+"""SQLite inventory store with stock, unit-price bands, and PO lines."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from invoice_automation.domain.models import LineItem
 # Case README seed. Kept as DEFAULT_SEED for clear call sites.
 DEFAULT_SEED: tuple[tuple[str, int], ...] = INVENTORY_SEED
 
-# Catalog unit prices for master-data checks (5% tolerance by default).
+# Exact catalog for strict mode.
 DEFAULT_UNIT_PRICES: tuple[tuple[str, str], ...] = (
     ("WidgetA", "250.00"),
     ("WidgetB", "500.00"),
@@ -23,7 +23,14 @@ DEFAULT_UNIT_PRICES: tuple[tuple[str, str], ...] = (
     ("FakeItem", "1.00"),
 )
 
-# Open PO coverage for happy-path SKUs (optional master-data check).
+# Soft bands allow corpus discounts and expedited prices.
+DEFAULT_PRICE_BANDS: tuple[tuple[str, str, str], ...] = (
+    ("WidgetA", "200.00", "300.00"),
+    ("WidgetB", "400.00", "600.00"),
+    ("GadgetX", "50.00", "800.00"),
+    ("FakeItem", "0.01", "50000.00"),
+)
+
 DEFAULT_PO_LINES: tuple[tuple[str, str, int], ...] = (
     ("PO-1001", "WidgetA", 50),
     ("PO-1001", "WidgetB", 50),
@@ -36,6 +43,14 @@ UNIT_PRICE_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS unit_prices (
     item TEXT PRIMARY KEY,
     unit_price TEXT NOT NULL
+)
+"""
+
+PRICE_BAND_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS unit_price_bands (
+    item TEXT PRIMARY KEY,
+    min_price TEXT NOT NULL,
+    max_price TEXT NOT NULL
 )
 """
 
@@ -60,18 +75,22 @@ class SqliteInventoryRepository:
         price_tolerance: Decimal = PRICE_TOLERANCE,
         require_po: bool = False,
         require_price_check: bool = False,
+        soft_price_bands: bool = True,
     ) -> None:
         self.db_path = Path(db_path)
         self.price_tolerance = price_tolerance
         self.require_po = require_po
-        # Off by default: case corpus unit prices vary; enable in master-data tests.
+        # Strict catalog percent check. Off by default.
         self.require_price_check = require_price_check
+        # Soft band check when unit_price is set. On by default.
+        self.soft_price_bands = soft_price_bands
         self._init_db(reseeds=reseeds)
 
     def _init_db(self, *, reseeds: bool) -> None:
         with connect(self.db_path) as conn:
             conn.execute(INVENTORY_SCHEMA_SQL)
             conn.execute(UNIT_PRICE_SCHEMA_SQL)
+            conn.execute(PRICE_BAND_SCHEMA_SQL)
             conn.execute(PO_SCHEMA_SQL)
             if reseeds:
                 self._reseed_conn(conn)
@@ -88,6 +107,11 @@ class SqliteInventoryRepository:
         conn.executemany("INSERT INTO inventory VALUES (?, ?)", DEFAULT_SEED)
         conn.execute("DELETE FROM unit_prices")
         conn.executemany("INSERT INTO unit_prices VALUES (?, ?)", DEFAULT_UNIT_PRICES)
+        conn.execute("DELETE FROM unit_price_bands")
+        conn.executemany(
+            "INSERT INTO unit_price_bands VALUES (?, ?, ?)",
+            DEFAULT_PRICE_BANDS,
+        )
         conn.execute("DELETE FROM purchase_orders")
         conn.executemany(
             "INSERT INTO purchase_orders (po_id, item, ordered_qty) VALUES (?, ?, ?)",
@@ -110,7 +134,8 @@ class SqliteInventoryRepository:
 
         Notes
         -----
-        Quantities are summed by SKU so split lines cannot oversell stock.
+        Sum quantities by SKU so split lines cannot oversell stock.
+        Soft price-band mismatches are soft findings (see PolicyEngine).
         """
         issues: list[str] = []
         qty_by_sku: dict[str, int] = {}
@@ -136,16 +161,27 @@ class SqliteInventoryRepository:
                 elif qty > int(row["stock"]):
                     issues.append(f"insufficient_stock:{sku}")
 
-                if self.require_price_check and sku in priced and priced[sku] >= 0:
-                    price_row = conn.execute(
-                        "SELECT unit_price FROM unit_prices WHERE item = ?",
-                        (sku,),
-                    ).fetchone()
-                    if price_row is not None:
-                        catalog = Decimal(str(price_row["unit_price"]))
-                        if catalog > 0:
-                            delta = abs(priced[sku] - catalog) / catalog
-                            if delta > self.price_tolerance:
+                if sku in priced and priced[sku] >= 0:
+                    if self.require_price_check:
+                        price_row = conn.execute(
+                            "SELECT unit_price FROM unit_prices WHERE item = ?",
+                            (sku,),
+                        ).fetchone()
+                        if price_row is not None:
+                            catalog = Decimal(str(price_row["unit_price"]))
+                            if catalog > 0:
+                                delta = abs(priced[sku] - catalog) / catalog
+                                if delta > self.price_tolerance:
+                                    issues.append(f"price_mismatch:{sku}")
+                    elif self.soft_price_bands:
+                        band = conn.execute(
+                            "SELECT min_price, max_price FROM unit_price_bands WHERE item = ?",
+                            (sku,),
+                        ).fetchone()
+                        if band is not None:
+                            lo = Decimal(str(band["min_price"]))
+                            hi = Decimal(str(band["max_price"]))
+                            if priced[sku] < lo or priced[sku] > hi:
                                 issues.append(f"price_mismatch:{sku}")
 
                 if self.require_po:

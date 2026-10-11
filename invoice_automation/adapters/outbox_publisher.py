@@ -28,7 +28,13 @@ class OutboxPublisher:
                 payload = json.loads(raw) if isinstance(raw, str) else dict(raw)
             except json.JSONDecodeError:
                 payload = {"raw": raw}
-            payload = {**payload, "source": "outbox", "outbox_id": row["id"]}
+            # Keep event type PaymentOutboxPublished. Put saga type in payload.
+            payload = {
+                **payload,
+                "source": "outbox",
+                "outbox_id": row["id"],
+                "saga_event_type": str(row.get("event_type") or ""),
+            }
             self.events.emit(
                 "PaymentOutboxPublished",
                 str(row.get("correlation_id") or ""),

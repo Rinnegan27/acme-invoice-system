@@ -16,7 +16,7 @@
       "message": "",
       "actual": {
         "file_name": "invoice_1001.txt",
-        "invoice_id": "invoice_1001",
+        "invoice_id": "INV-1001",
         "status": "paid",
         "issues": [],
         "approval_reason": "Auto-approved under $10k threshold",
@@ -34,7 +34,7 @@
       "message": "",
       "actual": {
         "file_name": "invoice_1004.json",
-        "invoice_id": "invoice_1004",
+        "invoice_id": "INV-1004",
         "status": "paid",
         "issues": [],
         "approval_reason": "Auto-approved under $10k threshold",
@@ -52,7 +52,7 @@
       "message": "",
       "actual": {
         "file_name": "invoice_1006.csv",
-        "invoice_id": "invoice_1006",
+        "invoice_id": "INV-1006",
         "status": "paid",
         "issues": [],
         "approval_reason": "Auto-approved under $10k threshold",

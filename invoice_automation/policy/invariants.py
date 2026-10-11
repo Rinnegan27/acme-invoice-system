@@ -1,4 +1,11 @@
-"""Deterministic schema and integrity checks. No LLM work here."""
+"""Schema and integrity checks. No LLM work.
+
+Notes
+-----
+This module is not an ERP tax engine. When all lines have prices, a total
+above the line sum is allowed for tax or fees. A total below the line sum
+by more than $0.05 raises ``amount_line_mismatch``.
+"""
 
 from __future__ import annotations
 
@@ -56,8 +63,8 @@ def collect_invariant_issues(invoice: Invoice) -> list[str]:
             line_total += item.unit_price * item.quantity
 
     if priced and invoice.items and invoice.amount >= 0:
-        # Lines exceeding total is an integrity / spatial-join fault.
-        # Totals above lines are allowed (tax, shipping, fees) — common in the case corpus.
+        # Line sum above total fails integrity.
+        # Total above lines is allowed for tax, shipping, or fees.
         if line_total > invoice.amount + Decimal("0.05"):
             issues.append("amount_line_mismatch")
 

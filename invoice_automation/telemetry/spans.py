@@ -1,15 +1,17 @@
-"""Lightweight OpenTelemetry-shaped stage spans.
+"""Stage spans in OpenTelemetry shape.
 
 Notes
 -----
-Writes JSON span lines to ``spans.jsonl`` under the runtime work dir.
-Uses the OpenTelemetry API when installed; otherwise emits compatible JSON.
-Does not require a live OTLP collector.
+Write JSONL lines to ``spans.jsonl``. Write an OTLP/JSON batch to
+``otlp_traces.json``. Set ``GALATIQ_SPAN_CONSOLE=1`` for console output.
+Use the OpenTelemetry API when it is installed. A live collector is not
+required.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from collections.abc import Iterator
@@ -19,15 +21,76 @@ from typing import Any
 
 
 class SpanExporter:
-    """Append OTel-like span records to a JSONL file."""
+    """Write span records to JSONL and OTLP/JSON files."""
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.otlp_path = self.path.parent / "otlp_traces.json"
+        self._otlp_spans: list[dict[str, Any]] = []
+        if self.otlp_path.exists():
+            try:
+                prior = json.loads(self.otlp_path.read_text(encoding="utf-8"))
+                self._otlp_spans = list(
+                    (((prior.get("resourceSpans") or [{}])[0].get("scopeSpans") or [{}])[0]).get(
+                        "spans"
+                    )
+                    or []
+                )
+            except (json.JSONDecodeError, TypeError, IndexError, AttributeError):
+                self._otlp_spans = []
 
     def emit(self, span: dict[str, Any]) -> None:
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(span, separators=(",", ":")) + "\n")
+        self._append_otlp(span)
+        if os.environ.get("GALATIQ_SPAN_CONSOLE", "").strip() in {"1", "true", "yes"}:
+            print(
+                f"[span] {span.get('name')} status={span.get('status')} "
+                f"attrs={span.get('attributes')}",
+                flush=True,
+            )
+
+    def _append_otlp(self, span: dict[str, Any]) -> None:
+        attrs = [
+            {"key": str(k), "value": {"stringValue": str(v)}}
+            for k, v in (span.get("attributes") or {}).items()
+        ]
+        otlp_span = {
+            "traceId": span.get("trace_id"),
+            "spanId": span.get("span_id"),
+            "name": span.get("name"),
+            "kind": 1,
+            "startTimeUnixNano": str(span.get("start_time_unix_nano")),
+            "endTimeUnixNano": str(span.get("end_time_unix_nano")),
+            "attributes": attrs,
+            "status": {
+                "code": 1 if span.get("status") == "OK" else 2,
+                "message": "" if span.get("status") == "OK" else "ERROR",
+            },
+        }
+        self._otlp_spans.append(otlp_span)
+        batch = {
+            "resourceSpans": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {
+                                "key": "service.name",
+                                "value": {"stringValue": "galatiq-invoice-system"},
+                            }
+                        ]
+                    },
+                    "scopeSpans": [
+                        {
+                            "scope": {"name": "galatiq.spans", "version": "1"},
+                            "spans": self._otlp_spans,
+                        }
+                    ],
+                }
+            ]
+        }
+        self.otlp_path.write_text(json.dumps(batch, indent=2) + "\n", encoding="utf-8")
 
 
 @contextmanager
@@ -38,7 +101,7 @@ def stage_span(
     correlation_id: str = "",
     attributes: dict[str, Any] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Record a stage span. Always yields a mutable attrs dict."""
+    """Record one stage span. Yield a mutable attrs dict."""
     start = time.time()
     attrs: dict[str, Any] = dict(attributes or {})
     if correlation_id:
@@ -78,7 +141,7 @@ def _try_otel_record(
     status: str,
     attrs: dict[str, Any],
 ) -> None:
-    """Best-effort OpenTelemetry API hook when the package is present."""
+    # Call OpenTelemetry when the package is installed.
     try:
         from opentelemetry import trace
         from opentelemetry.trace import Status, StatusCode
@@ -89,5 +152,4 @@ def _try_otel_record(
         for key, value in attrs.items():
             span.set_attribute(str(key), str(value))
         span.set_status(Status(StatusCode.OK if status == "OK" else StatusCode.ERROR))
-        # Duration is implicit; keep API call side-effect free beyond attributes.
         _ = (start, end)

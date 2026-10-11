@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.1.1"><img alt="Version" src="https://img.shields.io/badge/version-1.1.1-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.2.0"><img alt="Version" src="https://img.shields.io/badge/version-1.2.0-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
   <a href="https://github.com/Rinnegan27/galatiq-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
@@ -262,8 +262,7 @@ We do not plan these changes:
 Still open for a later commercial cut:
 
 - Live OIDC / enterprise IdP (Okta, Auth0)
-- OTLP export of stage spans (spans already write to `spans.jsonl`)
-- Mandatory PO matching beyond the optional catalog seed
+- Mandatory PO matching as a hard default (soft bands and optional `require_po` already ship)
 
 ---
 
@@ -432,6 +431,11 @@ This build covers the full Galatiq case surface.
 | Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
 | Fail-closed extraction | Missing totals and bad keys do not silently succeed |
 | Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
+| Business invoice ids in CLI/results | Prefer extracted `INV-…` ids over file stems |
+| Soft master-data price bands | Seeded unit-price bands; absurd prices flag `price_mismatch` |
+| Local OTLP span batch | `spans.jsonl` and `otlp_traces.json` (no live collector) |
+| Pay/stock reconcile hold | Gateway success and stock fail → `RECONCILE` / `PaymentStockReconcile` |
+| Tax / fee tolerant totals | Totals above priced lines allowed; shortfalls flag mismatch |
 
 ---
 
@@ -442,7 +446,7 @@ This build covers the full Galatiq case surface.
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | 🏷️ Releases | https://github.com/Rinnegan27/galatiq-invoice-system/releases |
 
-Current package version: **1.1.1** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **1.2.0** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 

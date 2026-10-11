@@ -16,16 +16,17 @@ from invoice_automation.ports.contracts import InventoryRepository, PaymentGatew
 
 
 class PaymentSaga:
-    """Coordinates payment_intent + outbox + gateway under one SQLite txn where possible.
+    """Run payment_intent, outbox, and gateway.
 
     Notes
     -----
-    The gateway call cannot be inside the DB transaction. We therefore:
-    1. Create/upsert PaymentIntent in PENDING.
-    2. Call gateway with idempotency key.
-    3. Decrement inventory stock (fail closed).
-    4. In one transaction: mark SUCCEEDED/FAILED and write outbox event.
-    Crash between 2 and 3 leaves intent PENDING and gateway idempotent, so replay is safe.
+    The gateway call is outside the DB transaction.
+    1. Create or update PaymentIntent as PENDING.
+    2. Call the gateway with the idempotency key.
+    3. Decrement inventory stock.
+    4. If stock fails after a successful pay, set RECONCILE and emit
+       ``PaymentStockReconcile``. Do not mark the pay as failed.
+    5. On full success, set SUCCEEDED and write ``PaymentSucceeded``.
     """
 
     def __init__(
@@ -57,9 +58,9 @@ class PaymentSaga:
                 "SELECT * FROM payment_intent WHERE invoice_id = ?",
                 (invoice_id,),
             ).fetchone()
-            if existing and existing["status"] == "SUCCEEDED":
+            if existing and existing["status"] in {"SUCCEEDED", "RECONCILE"}:
                 return PaymentResult(
-                    status="success",
+                    status="success" if existing["status"] == "SUCCEEDED" else "reconcile",
                     vendor=existing["vendor"],
                     amount=Decimal(existing["amount"]),
                     idempotency_key=existing["idempotency_key"],
@@ -92,8 +93,9 @@ class PaymentSaga:
             try:
                 self._inventory.decrement_stock(items)
             except ValidationError as exc:
-                self._finalize_failure(invoice_id, correlation_id, str(exc))
-                raise PaymentError(str(exc)) from exc
+                # Gateway paid. Stock failed. Hold for ops; do not mark FAILED.
+                self._finalize_reconcile(invoice_id, correlation_id, result, str(exc))
+                raise PaymentError(f"stock_reconcile_required:{exc}") from exc
 
         self._finalize_success(invoice_id, correlation_id, result)
         return result
@@ -127,6 +129,55 @@ class PaymentSaga:
                 VALUES (?, 'PaymentSucceeded', ?, ?)
                 """,
                 (invoice_id, json.dumps(payload), correlation_id),
+            )
+            conn.commit()
+
+    def _finalize_reconcile(
+        self,
+        invoice_id: str,
+        correlation_id: str,
+        result: PaymentResult,
+        reason: str,
+    ) -> None:
+        # Gateway paid. Stock failed. Hold for ops.
+        now = time.time()
+        payload = {
+            "invoice_id": invoice_id,
+            "vendor": result.vendor,
+            "amount": str(result.amount),
+            "idempotency_key": result.idempotency_key,
+            "transaction_id": result.transaction_id,
+            "reason": reason,
+            "gateway_status": "success",
+            "stock_status": "failed",
+        }
+        with connect(self.db_path) as conn:
+            conn.execute(
+                """
+                UPDATE payment_intent
+                SET status = 'RECONCILE',
+                    needs_manual_reconciliation = 1,
+                    updated_at = ?
+                WHERE invoice_id = ?
+                """,
+                (now, invoice_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO outbox (aggregate_id, event_type, payload, correlation_id)
+                VALUES (?, 'PaymentStockReconcile', ?, ?)
+                """,
+                (invoice_id, json.dumps(payload), correlation_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO alerts (severity, message, correlation_id)
+                VALUES ('error', ?, ?)
+                """,
+                (
+                    f"stock reconcile required for {invoice_id}: gateway paid; {reason}",
+                    correlation_id,
+                ),
             )
             conn.commit()
 

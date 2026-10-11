@@ -430,12 +430,11 @@ class Pipeline:
 
     def _summarize(self, path: Path, correlation_id: str) -> PipelineResult:
         events = [e for e in self.events.read_all() if e.get("correlation_id") == correlation_id]
-        invoice_id = path.stem
+        invoice_id = _business_invoice_id(events, fallback=path.stem)
         status = "unknown"
         issues: tuple[str, ...] = ()
         reason = ""
         for event in events:
-            invoice_id = event.get("invoice_id") or invoice_id
             et = event.get("event_type")
             payload = event.get("payload") or {}
             if et == "InvoiceRejected":
@@ -445,13 +444,18 @@ class Pipeline:
                 reason = str(payload.get("reason") or reason)
             elif et == "PaymentSucceeded":
                 status = InvoiceStatus.PAID.value
+            elif et == "PaymentStockReconcile":
+                # Gateway paid. Stock failed. Ops must reconcile.
+                status = "reconcile"
+                reason = str(payload.get("error") or payload.get("reason") or reason)
             elif et == "PaymentFailed":
-                # Do not leave status stuck on approved when pay did not complete.
+                # Keep status failed when pay did not complete.
                 status = "failed"
                 reason = str(payload.get("error") or reason)
             elif et == "InvoiceApproved" and status not in {
                 InvoiceStatus.PAID.value,
                 "failed",
+                "reconcile",
             }:
                 status = InvoiceStatus.APPROVED.value
                 reason = str(payload.get("reason") or reason)
@@ -476,3 +480,31 @@ def _read_source(path: Path) -> str:
     if path.suffix.lower() == ".pdf":
         return extract_pdf_text(path)
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _business_invoice_id(events: list[dict[str, Any]], *, fallback: str) -> str:
+    """Return a business INV- id from events when present."""
+    preferred = ""
+    for event in events:
+        payload = event.get("payload") or {}
+        nested = payload.get("invoice") if isinstance(payload, dict) else None
+        candidates = [
+            event.get("invoice_id"),
+            payload.get("invoice_id") if isinstance(payload, dict) else None,
+            nested.get("invoice_id") if isinstance(nested, dict) else None,
+        ]
+        for cand in candidates:
+            text = str(cand or "").strip()
+            if not text:
+                continue
+            # Match INV- / INV_ / INV<digit>. Do not match stems such as invoice_1002.
+            upper = text.upper()
+            if (
+                upper.startswith("INV-")
+                or upper.startswith("INV_")
+                or (upper.startswith("INV") and len(upper) > 3 and upper[3].isdigit())
+            ):
+                return text
+            if not preferred:
+                preferred = text
+    return preferred or fallback

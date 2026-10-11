@@ -37,11 +37,14 @@ HARD_BLOCK_PREFIXES: tuple[str, ...] = (
     "suspicious_vendor_text",
 )
 
-# Soft findings may be overridden only with an explicit override permit.
+# Soft findings need an explicit override permit.
 SOFT_PREFIXES: tuple[str, ...] = (
     "insufficient_stock",
     "missing_vendor",
     "amount_line_mismatch",
+    "price_mismatch",
+    "no_po_match",
+    "po_qty_exceeded",
 )
 
 _PLACEHOLDER_SECRETS = frozenset(

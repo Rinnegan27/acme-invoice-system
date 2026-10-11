@@ -27,3 +27,4 @@ def test_payment_flushes_outbox_to_jsonl(tmp_path: Path) -> None:
     ]
     assert published, "expected PaymentOutboxPublished in JSONL"
     assert published[0]["payload"].get("source") == "outbox"
+    assert published[0]["payload"].get("saga_event_type") == "PaymentSucceeded"
