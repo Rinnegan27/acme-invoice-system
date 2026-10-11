@@ -136,7 +136,7 @@ uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
 
 Expect status `paid` for INV-1001.
 
-### ©️ Case Simulation Contract
+### 🅲 Case Simulation Contract
 
 ```bash
 uv run python main.py --sim=case --llm=stub
