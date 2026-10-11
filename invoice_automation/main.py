@@ -279,6 +279,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=200,
         help="Drain iteration budget (default 200)",
     )
+    parser.add_argument(
+        "--strict-master-data",
+        action="store_true",
+        help="Enable strict catalog unit-price checks (off by default; soft bands remain)",
+    )
     return parser
 
 
@@ -342,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
             work_dir=args.work_dir,
             use_grok=use_grok,
             max_steps=args.max_steps,
+            require_price_check=bool(args.strict_master_data),
         )
     except (RuntimeError, Exception) as exc:
         print(f"error: {exc}", file=sys.stderr)

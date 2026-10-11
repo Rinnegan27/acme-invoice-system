@@ -16,11 +16,12 @@ import os
 import re
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
-from invoice_automation.adapters.parsers import parse_invoice_text
+from invoice_automation.adapters.parsers import normalize_invoice_id, parse_invoice_text
 from invoice_automation.case_brief import GROK_MODEL, is_live_xai_key
 from invoice_automation.domain.exceptions import ExtractionError
 from invoice_automation.domain.models import (
@@ -69,20 +70,24 @@ class _ApproveModel(BaseModel):
 
 
 # Pinned prompt versions for eval / change control (bump when text changes).
-EXTRACT_PROMPT_VERSION = "extract-v1"
-APPROVE_PROMPT_VERSION = "approve-v1"
+EXTRACT_PROMPT_VERSION = "extract-v2"
+APPROVE_PROMPT_VERSION = "approve-v2"
 
 EXTRACT_SYSTEM = """You extract structured invoice data for Acme Corp.
 Return ONLY valid JSON with keys:
 invoice_id (string), vendor (string), amount (number), due_date (YYYY-MM-DD or null),
 items (array of {sku, quantity, unit_price}), notes (string).
+Prefer invoice_id in the form INV-1001 (include the INV- prefix).
 Do not invent SKUs that are not present. Quantity must be an integer.
 If data is missing, use best effort and mention gaps in notes."""
 
 APPROVE_SYSTEM = """You are a VP reviewing invoices for Acme Corp.
-Approve only if the invoice looks legitimate and issues are empty/acceptable.
-High-value invoices (>$10,000) require extra scrutiny for fraud, urgency pressure, and fake items.
-Return ONLY JSON: {"approved": bool, "reason": string, "reflected": true}."""
+Return ONLY JSON: {"approved": bool, "reason": string, "reflected": true}.
+Rules:
+- If issues is non-empty, reject.
+- If issues is empty and high_value is false, approve (validation already passed).
+- If high_value is true, scrutinize fraud, FakeItem, urgency pressure, and stock risk.
+Do not invent new validation issues that validation did not raise."""
 
 
 class GrokAuthError(RuntimeError):
@@ -158,6 +163,24 @@ EXTRACT_SCHEMA: dict[str, Any] = {
     },
 }
 
+APPROVE_SCHEMA: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "invoice_approve",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "approved": {"type": "boolean"},
+                "reason": {"type": "string"},
+                "reflected": {"type": "boolean"},
+            },
+            "required": ["approved", "reason", "reflected"],
+        },
+    },
+}
+
 
 class GrokLLM:
     """Live Grok client with schema validation and self-correction.
@@ -194,11 +217,20 @@ class GrokLLM:
         self.breaker = CircuitBreaker(failure_threshold=2, recovery_timeout_s=90.0)
         self.extract_prompt_version = EXTRACT_PROMPT_VERSION
         self.approve_prompt_version = APPROVE_PROMPT_VERSION
+        self.last_approve_audit: dict[str, Any] | None = None
         if not is_live_xai_key(self.api_key):
             raise RuntimeError(
                 "XAI_API_KEY is required for GrokLLM "
                 '(case placeholder is api_key="your_key" — set a real key in .env)'
             )
+
+    @staticmethod
+    def _hv_deterministic() -> bool:
+        return os.environ.get("GALATIQ_HV_DETERMINISTIC", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
 
     def _client(self, timeout_s: float | None = None) -> Any:
         from openai import OpenAI
@@ -337,7 +369,9 @@ class GrokLLM:
                 if not model.items:
                     raise ExtractionError("model returned no items")
                 invoice = Invoice(
-                    invoice_id=model.invoice_id,
+                    invoice_id=normalize_invoice_id(
+                        model.invoice_id, fallback=Path(source_path).stem
+                    ),
                     vendor=model.vendor,
                     amount=model.amount,
                     due_date=_parse_grok_due_date(model.due_date),
@@ -377,12 +411,46 @@ class GrokLLM:
             raise ExtractionError(f"grok extract failed: {last_error}") from exc
 
     def approve(self, invoice: Invoice, deadline_s: float = 30.0) -> ApprovalDecision:
-        if invoice.issues and not invoice.is_high_value:
+        """Approve or reject with schema-validated JSON and policy guardrails.
+
+        Notes
+        -----
+        Guardrails (deterministic; run before/after the model):
+        1. Non-empty ``issues`` → always reject (validation already failed).
+        2. Empty ``issues`` and not high-value → always approve (matches stub /
+           case scenario matrix; model cannot invent new rejects).
+        3. High-value with FakeItem → always reject.
+        4. Other high-value invoices → Grok VP reflection with ``APPROVE_SCHEMA``.
+        """
+        self.last_approve_audit = None
+        # Guardrail 1: validation findings always win.
+        if invoice.issues:
             return ApprovalDecision(
                 approved=False,
                 reason=f"Rejected due to issues: {', '.join(invoice.issues)}",
                 reflected=False,
             )
+        # Guardrail 2: clean non-HV invoices follow the case matrix / stub path.
+        if not invoice.is_high_value:
+            if invoice.amount <= 0:
+                return ApprovalDecision(
+                    approved=False,
+                    reason="Rejected: non-positive amount",
+                    reflected=True,
+                )
+            return ApprovalDecision(
+                approved=True,
+                reason="Auto-approved under $10k after validation (policy gate)",
+                reflected=False,
+            )
+        # Guardrail 3: FakeItem never clears high-value scrutiny.
+        if any(i.sku.lower() == "fakeitem" for i in invoice.items):
+            return ApprovalDecision(
+                approved=False,
+                reason=f"High value ({invoice.amount}) rejected: FakeItem present",
+                reflected=True,
+            )
+
         payload = {
             "invoice_id": invoice.invoice_id,
             "vendor": invoice.vendor,
@@ -392,28 +460,57 @@ class GrokLLM:
                 for i in invoice.items
             ],
             "issues": list(invoice.issues),
-            "high_value": invoice.is_high_value,
+            "high_value": True,
         }
-        data = self._chat_json(APPROVE_SYSTEM, json.dumps(payload), timeout_s=deadline_s)
+        user_prompt = json.dumps(payload)
+        data = self._chat_json(
+            APPROVE_SYSTEM,
+            user_prompt,
+            timeout_s=deadline_s,
+            response_format=APPROVE_SCHEMA,
+        )
         decision = _ApproveModel.model_validate(data)
-        if invoice.is_high_value:
-            critique_user = (
-                "Critique this VP decision. Look for fraud, FakeItem, urgency pressure, "
-                "stock issues. Return revised JSON decision.\n"
-                f"Invoice: {json.dumps(payload)}\n"
-                f"Initial decision: {decision.model_dump_json()}"
-            )
-            data2 = self._chat_json(APPROVE_SYSTEM, critique_user, timeout_s=deadline_s)
-            decision = _ApproveModel.model_validate(data2)
+        critique_user = (
+            "Critique this VP decision. Look for fraud, FakeItem, urgency pressure, "
+            "stock issues. Return revised JSON decision.\n"
+            f"Invoice: {json.dumps(payload)}\n"
+            f"Initial decision: {decision.model_dump_json()}"
+        )
+        # Deterministic mode: one temperature-0 call; record prompt + JSON for audit.
+        if self._hv_deterministic():
+            self.last_approve_audit = {
+                "mode": "hv_deterministic",
+                "temperature": 0,
+                "system": APPROVE_SYSTEM,
+                "user": user_prompt,
+                "response": data,
+                "prompt_version": self.approve_prompt_version,
+            }
             return ApprovalDecision(
                 approved=decision.approved,
                 reason=decision.reason,
                 reflected=True,
             )
+        data2 = self._chat_json(
+            APPROVE_SYSTEM,
+            critique_user,
+            timeout_s=deadline_s,
+            response_format=APPROVE_SCHEMA,
+        )
+        decision = _ApproveModel.model_validate(data2)
+        self.last_approve_audit = {
+            "mode": "hv_critique",
+            "temperature": 0,
+            "system": APPROVE_SYSTEM,
+            "user": critique_user,
+            "initial_response": data,
+            "response": data2,
+            "prompt_version": self.approve_prompt_version,
+        }
         return ApprovalDecision(
             approved=decision.approved,
             reason=decision.reason,
-            reflected=decision.reflected,
+            reflected=True,
         )
 
 

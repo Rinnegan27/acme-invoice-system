@@ -7,6 +7,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-10-11
+
+### Added
+
+- Normalize bare / stem invoice ids to ``INV-…`` (live Grok + parsers).
+- Strict Grok approve JSON schema + deterministic approve guardrails.
+- CLI ``--strict-master-data`` for catalog unit-price checks.
+- ``GALATIQ_HV_DETERMINISTIC=1`` one-shot HV approve + ``ApprovalAudit`` event.
+- Payment saga keys by business ``INV-…`` id; ``source_stem`` is audit metadata.
+
+### Changed
+
+- Narrow worker exception handling; unexpected errors re-raise after queue fail.
+- Grok extract prompt ``extract-v2``; approve prompt ``approve-v2``.
+
 ## [1.2.1] — 2026-10-11
 
 ### Changed
@@ -84,7 +99,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.1.0...v1.1.1

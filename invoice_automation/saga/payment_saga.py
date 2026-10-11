@@ -62,13 +62,14 @@ class PaymentSaga:
         correlation_id: str,
         idempotency_key: str | None = None,
         items: Sequence[LineItem] = (),
+        source_stem: str = "",
     ) -> PaymentResult:
         """Pay one invoice through the gateway and optional stock draw.
 
         Parameters
         ----------
         invoice_id : str
-            Payment aggregate id (often the source file stem).
+            Business payment aggregate id (normalized ``INV-…``).
         vendor : str
             Payee name.
         amount : Decimal
@@ -79,6 +80,8 @@ class PaymentSaga:
             Gateway key. Defaults to ``pay:{invoice_id}``.
         items : sequence of LineItem
             Lines for stock decrement. Empty skips stock.
+        source_stem : str
+            Source file stem for audit only (not the aggregate key).
 
         Returns
         -------
@@ -120,12 +123,18 @@ class PaymentSaga:
 
         try:
             result = self._gateway.pay(key, vendor, amount)
-        except Exception as exc:  # noqa: BLE001 - recorded then re-raised as domain error
-            self._finalize_failure(invoice_id, correlation_id, str(exc))
+        except PaymentError as exc:
+            self._finalize_failure(invoice_id, correlation_id, str(exc), source_stem=source_stem)
+            raise
+        except Exception as exc:
+            # Gateway boundary: wrap unknown adapter errors as PaymentError.
+            self._finalize_failure(invoice_id, correlation_id, str(exc), source_stem=source_stem)
             raise PaymentError(str(exc)) from exc
 
         if result.status != "success":
-            self._finalize_failure(invoice_id, correlation_id, result.status)
+            self._finalize_failure(
+                invoice_id, correlation_id, result.status, source_stem=source_stem
+            )
             raise PaymentError(f"payment failed: {result.status}")
 
         if self._inventory is not None and items:
@@ -133,10 +142,12 @@ class PaymentSaga:
                 self._inventory.decrement_stock(items)
             except ValidationError as exc:
                 # Gateway paid. Stock failed. Hold for ops; do not mark FAILED.
-                self._finalize_reconcile(invoice_id, correlation_id, result, str(exc))
+                self._finalize_reconcile(
+                    invoice_id, correlation_id, result, str(exc), source_stem=source_stem
+                )
                 raise PaymentError(f"stock_reconcile_required:{exc}") from exc
 
-        self._finalize_success(invoice_id, correlation_id, result)
+        self._finalize_success(invoice_id, correlation_id, result, source_stem=source_stem)
         return result
 
     def _finalize_success(
@@ -144,6 +155,8 @@ class PaymentSaga:
         invoice_id: str,
         correlation_id: str,
         result: PaymentResult,
+        *,
+        source_stem: str = "",
     ) -> None:
         now = time.time()
         payload = {
@@ -152,6 +165,7 @@ class PaymentSaga:
             "amount": str(result.amount),
             "idempotency_key": result.idempotency_key,
             "transaction_id": result.transaction_id,
+            "source_stem": source_stem,
         }
         with connect(self.db_path) as conn:
             conn.execute(
@@ -177,6 +191,8 @@ class PaymentSaga:
         correlation_id: str,
         result: PaymentResult,
         reason: str,
+        *,
+        source_stem: str = "",
     ) -> None:
         # Gateway paid. Stock failed. Hold for ops.
         now = time.time()
@@ -189,6 +205,7 @@ class PaymentSaga:
             "reason": reason,
             "gateway_status": "success",
             "stock_status": "failed",
+            "source_stem": source_stem,
         }
         with connect(self.db_path) as conn:
             conn.execute(
@@ -220,7 +237,14 @@ class PaymentSaga:
             )
             conn.commit()
 
-    def _finalize_failure(self, invoice_id: str, correlation_id: str, reason: str) -> None:
+    def _finalize_failure(
+        self,
+        invoice_id: str,
+        correlation_id: str,
+        reason: str,
+        *,
+        source_stem: str = "",
+    ) -> None:
         now = time.time()
         with connect(self.db_path) as conn:
             conn.execute(
@@ -238,7 +262,11 @@ class PaymentSaga:
                 INSERT INTO outbox (aggregate_id, event_type, payload, correlation_id)
                 VALUES (?, 'PaymentFailed', ?, ?)
                 """,
-                (invoice_id, json.dumps({"reason": reason}), correlation_id),
+                (
+                    invoice_id,
+                    json.dumps({"reason": reason, "source_stem": source_stem}),
+                    correlation_id,
+                ),
             )
             conn.execute(
                 """

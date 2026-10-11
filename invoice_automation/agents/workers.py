@@ -13,8 +13,15 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from invoice_automation.adapters.parsers import normalize_invoice_id
 from invoice_automation.adapters.pdf_text import extract_pdf_text
 from invoice_automation.agents.serialization import invoice_from_dict, invoice_to_dict
+from invoice_automation.domain.exceptions import (
+    ExtractionError,
+    InvoiceDomainError,
+    PaymentError,
+    ValidationError,
+)
 from invoice_automation.domain.models import InvoiceStatus, StageName
 from invoice_automation.ports.contracts import (
     EventSink,
@@ -110,22 +117,32 @@ class IngestionWorker:
             )
             self.queue.ack(msg["id"])
             self.metrics.incr_rate(StageName.INGESTION.value, "success")
-        except Exception as exc:  # noqa: BLE001 - classify auth vs soft failures
+        except Exception as exc:
             # Auth must surface to the CLI; do not bury it as IngestionFailed.
             from invoice_automation.adapters.llm_grok import GrokAuthError
 
             if isinstance(exc, GrokAuthError):
                 self.queue.fail(msg["id"], reason=str(exc))
                 raise
-            self.metrics.incr_error(StageName.INGESTION.value, type(exc).__name__)
-            self.events.emit(
-                "IngestionFailed",
-                correlation_id,
-                str(payload.get("invoice_id", Path(path).stem)),
-                {"error": str(exc)},
-                stage=StageName.INGESTION.value,
-            )
-            self.queue.fail(msg["id"], reason=str(exc))
+            from invoice_automation.resilience.policies import CircuitOpenError
+
+            if isinstance(
+                exc,
+                (ExtractionError, ValidationError, OSError, ValueError, CircuitOpenError),
+            ):
+                self.metrics.incr_error(StageName.INGESTION.value, type(exc).__name__)
+                self.events.emit(
+                    "IngestionFailed",
+                    correlation_id,
+                    str(payload.get("invoice_id", Path(path).stem)),
+                    {"error": str(exc)},
+                    stage=StageName.INGESTION.value,
+                )
+                self.queue.fail(msg["id"], reason=str(exc))
+            else:
+                self.metrics.incr_error(StageName.INGESTION.value, type(exc).__name__)
+                self.queue.fail(msg["id"], reason=str(exc))
+                raise
         finally:
             self.metrics.observe_latency(StageName.INGESTION.value, time.perf_counter() - started)
         return True
@@ -228,9 +245,13 @@ class ValidationWorker:
                 self.metrics.incr_rate(StageName.VALIDATION.value, "success")
             self.queue.ack(msg["id"])
             msg["payload"]["invoice"] = invoice_to_dict(invoice)
-        except Exception as exc:  # noqa: BLE001 - queue fail path
+        except (ValidationError, InvoiceDomainError, KeyError, TypeError, ValueError) as exc:
             self.metrics.incr_error(StageName.VALIDATION.value, type(exc).__name__)
             self.queue.fail(msg["id"], reason=str(exc))
+        except Exception:
+            self.metrics.incr_error(StageName.VALIDATION.value, "unexpected")
+            self.queue.fail(msg["id"], reason="unexpected validation error")
+            raise
         finally:
             self.metrics.observe_latency(StageName.VALIDATION.value, time.perf_counter() - started)
         return True
@@ -289,6 +310,15 @@ class ApprovalWorker:
         try:
             invoice = invoice_from_dict(msg["payload"]["invoice"])
             decision = self.llm.approve(invoice)
+            audit = getattr(self.llm, "last_approve_audit", None)
+            if isinstance(audit, dict) and audit:
+                self.events.emit(
+                    "ApprovalAudit",
+                    correlation_id,
+                    invoice.invoice_id,
+                    audit,
+                    stage=StageName.APPROVAL.value,
+                )
             if decision.approved:
                 from invoice_automation.policy.engine import PolicyError, get_policy_engine
 
@@ -359,9 +389,13 @@ class ApprovalWorker:
                 if decision.reflected:
                     self.metrics.incr_vp_reflection("reject")
             self.queue.ack(msg["id"])
-        except Exception as exc:  # noqa: BLE001 - queue fail path
+        except (InvoiceDomainError, KeyError, TypeError, ValueError) as exc:
             self.metrics.incr_error(StageName.APPROVAL.value, type(exc).__name__)
             self.queue.fail(msg["id"], reason=str(exc))
+        except Exception:
+            self.metrics.incr_error(StageName.APPROVAL.value, "unexpected")
+            self.queue.fail(msg["id"], reason="unexpected approval error")
+            raise
         finally:
             self.metrics.observe_latency(StageName.APPROVAL.value, time.perf_counter() - started)
         return True
@@ -434,8 +468,9 @@ class PaymentWorker:
                 open_issues=invoice.issues,
                 consume=False,
             )
-            # Stem keeps revised duplicates (same business id, different file) distinct.
-            payment_id = Path(invoice.source_path).stem or invoice.invoice_id
+            # Key saga by business INV- id; keep file stem as audit metadata only.
+            source_stem = Path(invoice.source_path).stem or ""
+            payment_id = normalize_invoice_id(invoice.invoice_id, fallback=source_stem)
             result = self.saga.pay(
                 invoice_id=payment_id,
                 vendor=invoice.vendor,
@@ -443,6 +478,7 @@ class PaymentWorker:
                 correlation_id=correlation_id,
                 idempotency_key=f"pay:{payment_id}",
                 items=invoice.items,
+                source_stem=source_stem,
             )
             # Saga returned reconcile. Do not mark paid. Do not consume the permit.
             if result.status == "reconcile":
@@ -453,6 +489,8 @@ class PaymentWorker:
                     {
                         "error": "stock_reconcile_required:replay",
                         "transaction_id": result.transaction_id,
+                        "payment_id": payment_id,
+                        "source_stem": source_stem,
                     },
                     stage=StageName.PAYMENT.value,
                 )
@@ -475,13 +513,16 @@ class PaymentWorker:
                     "transaction_id": result.transaction_id,
                     "amount": str(result.amount),
                     "vendor": result.vendor,
+                    "payment_id": payment_id,
+                    "source_stem": source_stem,
                 },
                 stage=StageName.PAYMENT.value,
             )
             self.metrics.incr_rate(StageName.PAYMENT.value, "paid")
             self.metrics.incr_outcome("paid")
             self.queue.ack(msg["id"])
-        except Exception as exc:  # noqa: BLE001 - always emit terminal payment event
+        except (PaymentError, ValidationError) as exc:
+            # PolicyError subclasses ValidationError.
             self.metrics.incr_error(StageName.PAYMENT.value, type(exc).__name__)
             err = str(exc)
             event_type = (
@@ -500,6 +541,10 @@ class PaymentWorker:
                 stage=StageName.PAYMENT.value,
             )
             self.queue.fail(msg["id"], reason=err)
+        except Exception:
+            self.metrics.incr_error(StageName.PAYMENT.value, "unexpected")
+            self.queue.fail(msg["id"], reason="unexpected payment error")
+            raise
         finally:
             self.metrics.observe_latency(StageName.PAYMENT.value, time.perf_counter() - started)
         return True

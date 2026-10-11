@@ -120,6 +120,10 @@ class Pipeline:
         Drain budget. Remaining backlog emits ``DrainBudgetExceeded``.
     permit_secret : bytes or str or None
         HMAC secret for PaymentPermit. Default reads ``GALATIQ_PERMIT_SECRET``.
+    require_price_check : bool
+        When True, enable strict catalog unit-price checks (``--strict-master-data``).
+    require_po : bool
+        When True, require PO coverage for each SKU.
     """
 
     def __init__(
@@ -130,6 +134,8 @@ class Pipeline:
         event_log_path: str | Path | None = None,
         max_steps: int = 200,
         permit_secret: bytes | str | None = None,
+        require_price_check: bool = False,
+        require_po: bool = False,
     ) -> None:
         self.work_dir = Path(work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +143,13 @@ class Pipeline:
         db_path = self.work_dir / "system.db"
         self.db_path = db_path
         self.queue = SqliteWorkQueue(db_path, SCHEMA_PATH)
-        self.inventory = SqliteInventoryRepository(self.work_dir / "inventory.db", reseeds=True)
+        self.inventory = SqliteInventoryRepository(
+            self.work_dir / "inventory.db",
+            reseeds=True,
+            require_price_check=require_price_check,
+            require_po=require_po,
+            soft_price_bands=not require_price_check,
+        )
         self.events = JsonlEventLog(event_log_path or self.work_dir / "events.jsonl")
         self.metrics = InMemoryMetrics()
         self.gateway = MockPaymentGateway()
@@ -483,7 +495,11 @@ def _read_source(path: Path) -> str:
 
 
 def _business_invoice_id(events: list[dict[str, Any]], *, fallback: str) -> str:
-    # Prefer INV- business ids from events. Fall back to the file stem.
+    # Prefer INV- business ids from events. Normalize bare digits (live Grok).
+    # Scan all events so InvoiceReceived stems do not beat InvoiceExtracted ids.
+    from invoice_automation.adapters.parsers import normalize_invoice_id
+
+    best_inv = ""
     preferred = ""
     for event in events:
         payload = event.get("payload") or {}
@@ -494,17 +510,20 @@ def _business_invoice_id(events: list[dict[str, Any]], *, fallback: str) -> str:
             nested.get("invoice_id") if isinstance(nested, dict) else None,
         ]
         for cand in candidates:
-            text = str(cand or "").strip()
+            text = normalize_invoice_id(str(cand or "").strip(), fallback="")
             if not text:
                 continue
-            # Match INV- / INV_ / INV<digit>. Do not match stems such as invoice_1002.
             upper = text.upper()
-            if (
-                upper.startswith("INV-")
-                or upper.startswith("INV_")
-                or (upper.startswith("INV") and len(upper) > 3 and upper[3].isdigit())
-            ):
-                return text
+            if upper.startswith("INV-"):
+                # Prefer longer business ids (INV-1001 over INV-1).
+                if not best_inv or len(upper) > len(best_inv.upper()):
+                    best_inv = text
+                continue
             if not preferred:
                 preferred = text
+    if best_inv:
+        return best_inv
+    fb = normalize_invoice_id(fallback)
+    if fb.upper().startswith("INV-"):
+        return fb
     return preferred or fallback

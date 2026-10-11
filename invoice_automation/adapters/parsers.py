@@ -27,6 +27,51 @@ def parse_invoice_bytes(raw: bytes, source_path: str) -> Invoice:
     return parse_invoice_text(text, source_path)
 
 
+def normalize_invoice_id(raw: str, *, fallback: str = "") -> str:
+    """Normalize a business invoice id to ``INV-…`` when possible.
+
+    Parameters
+    ----------
+    raw : str
+        Candidate id from a parser, LLM, or event.
+    fallback : str
+        Used when ``raw`` is empty (often the source file stem).
+
+    Returns
+    -------
+    str
+        Normalized id. Bare digits become ``INV-{digits}``. Stems such as
+        ``invoice_1002`` become ``INV-1002``. Values that already use
+        ``INV-`` are returned in canonical form.
+
+    Notes
+    -----
+    Live Grok sometimes returns ``1002`` instead of ``INV-1002``. Call this
+    after extract so CLI summaries and permits stay consistent with parsers.
+    """
+    text = str(raw or "").replace(" ", "").strip()
+    if not text:
+        text = str(fallback or "").replace(" ", "").strip()
+    if not text:
+        return ""
+    upper = text.upper()
+    if upper.isdigit() and len(upper) >= 3:
+        return f"INV-{upper}"
+    # Stems like invoice_1002 → INV-1002. Do not map invoice1 → INV-1.
+    m = re.match(r"^INVOICE[_-](\d{3,})$", upper)
+    if m:
+        return f"INV-{m.group(1)}"
+    if upper.startswith("INV-"):
+        return upper
+    if upper.startswith("INV_"):
+        rest = upper[4:]
+        return f"INV-{rest}" if rest.isdigit() and len(rest) >= 3 else text
+    if upper.startswith("INV") and len(upper) > 3 and upper[3].isdigit():
+        rest = upper[3:]
+        return f"INV-{rest}" if rest.isdigit() else text
+    return text
+
+
 def parse_invoice_text(raw_text: str, source_path: str) -> Invoice:
     """Parse invoice text using suffix-specific strategies.
 
@@ -44,7 +89,11 @@ def parse_invoice_text(raw_text: str, source_path: str) -> Invoice:
     """
     suffix = Path(source_path).suffix.lower()
     handler = FORMAT_REGISTRY.get(suffix, _from_text)
-    return handler(raw_text, source_path)
+    invoice = handler(raw_text, source_path)
+    normalized = normalize_invoice_id(invoice.invoice_id, fallback=Path(source_path).stem)
+    if normalized and normalized != invoice.invoice_id:
+        return invoice.with_updates(invoice_id=normalized)
+    return invoice
 
 
 def _to_decimal(value: Any) -> Decimal:
@@ -397,11 +446,7 @@ def _from_text(raw: str, source_path: str) -> Invoice:
         or _find(r"Inv\s*#\s*[:#]?\s*(\d+)", raw)
         or Path(source_path).stem
     )
-    invoice_id = str(invoice_id).replace(" ", "").upper()
-    if invoice_id and not invoice_id.startswith("INV") and invoice_id.isdigit():
-        invoice_id = f"INV-{invoice_id}"
-    if invoice_id.startswith("INV") and not invoice_id.startswith("INV-"):
-        invoice_id = invoice_id.replace("INV", "INV-", 1)
+    invoice_id = normalize_invoice_id(str(invoice_id), fallback=Path(source_path).stem)
 
     vendor = (
         _find(r"Vendor\s*[:]\s*(.+)", raw)

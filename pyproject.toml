@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "galatiq-invoice-system"
-version = "1.2.1"
+version = "1.2.2"
 description = "Multi-agent AP invoice automation for the Galatiq case: custom SQLite pipeline, Grok or offline stub, FastAPI Control Centre, HMAC PaymentPermit"
 readme = "README.md"
 requires-python = ">=3.11"
