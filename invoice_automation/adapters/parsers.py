@@ -1,0 +1,522 @@
+"""Deterministic multi-format invoice parsers for offline and CI paths.
+
+Notes
+-----
+Missing totals fail closed. Do not coerce garbage amounts to zero.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import re
+import xml.etree.ElementTree as ET
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from io import StringIO
+from pathlib import Path
+from typing import Any
+
+from invoice_automation.domain.exceptions import ExtractionError
+from invoice_automation.domain.models import Invoice, InvoiceStatus, LineItem
+
+
+def parse_invoice_bytes(raw: bytes, source_path: str) -> Invoice:
+    """Parse invoice bytes using format strategy by suffix."""
+    text = raw.decode("utf-8", errors="replace")
+    return parse_invoice_text(text, source_path)
+
+
+def parse_invoice_text(raw_text: str, source_path: str) -> Invoice:
+    """Parse invoice text using suffix-specific strategies.
+
+    Parameters
+    ----------
+    raw_text : str
+        Document text (or decoded bytes).
+    source_path : str
+        Path used for suffix detection and invoice_id fallback.
+
+    Returns
+    -------
+    Invoice
+        Structured invoice with status EXTRACTED.
+    """
+    suffix = Path(source_path).suffix.lower()
+    handler = FORMAT_REGISTRY.get(suffix, _from_text)
+    return handler(raw_text, source_path)
+
+
+def _to_decimal(value: Any) -> Decimal:
+    """Parse a required decimal; never silently coerce garbage to 0."""
+    if value is None or value == "":
+        raise ExtractionError("invalid_amount: missing numeric value")
+    text = str(value).replace(",", "").replace("$", "").strip()
+    if not text:
+        raise ExtractionError("invalid_amount: empty numeric value")
+    try:
+        return Decimal(text)
+    except (InvalidOperation, ValueError) as exc:
+        raise ExtractionError(f"invalid_amount: {value!r}") from exc
+
+
+def _optional_decimal(value: Any) -> Decimal | None:
+    """Parse optional unit price; missing → None; garbage → ExtractionError."""
+    if value is None or value == "":
+        return None
+    return _to_decimal(value)
+
+
+def _parse_date(value: Any) -> date | None:
+    if value is None or value == "":
+        return None
+    text = str(value).strip()
+    if text.lower() in {"yesterday", "immediate"}:
+        return None
+    for fmt in ("%Y-%m-%d", "%b %d %Y", "%B %d, %Y", "%B %d %Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", text)
+    if m:
+        return datetime.strptime(m.group(1), "%Y-%m-%d").date()
+    return None
+
+
+def _vendor_from_json(data: dict[str, Any]) -> str:
+    vendor = data.get("vendor") or data.get("supplier")
+    if isinstance(vendor, dict):
+        name = vendor.get("name")
+        return str(name).strip() if name else "Unknown"
+    if vendor:
+        return str(vendor).strip()
+    return "Unknown"
+
+
+def _from_json(raw: str, source_path: str) -> Invoice:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ExtractionError(f"invalid JSON: {exc}") from exc
+
+    invoice_id = str(
+        data.get("invoice_number")
+        or data.get("invoice_id")
+        or data.get("id")
+        or Path(source_path).stem
+    )
+    vendor = _vendor_from_json(data)
+    amount = _to_decimal(data.get("total") if data.get("total") is not None else data.get("amount"))
+    due_date = _parse_date(data.get("due_date"))
+
+    items: list[LineItem] = []
+    for item in data.get("line_items") or data.get("items") or []:
+        sku = str(item.get("item") or item.get("sku") or item.get("name") or "UNKNOWN")
+        qty = int(item.get("quantity") or item.get("qty") or 0)
+        price = _optional_decimal(
+            item.get("unit_price") if item.get("unit_price") is not None else item.get("price")
+        )
+        items.append(LineItem(sku=sku, quantity=qty, unit_price=price))
+
+    if not items:
+        raise ExtractionError("JSON invoice has no line items")
+
+    return Invoice(
+        invoice_id=invoice_id,
+        vendor=vendor or "Unknown",
+        amount=amount,
+        due_date=due_date,
+        items=tuple(items),
+        source_path=source_path,
+        status=InvoiceStatus.EXTRACTED,
+    )
+
+
+def _from_csv(raw: str, source_path: str) -> Invoice:
+    """Support Galatiq key/value CSV, multi-line item CSV, and wide-row CSV."""
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    if not lines:
+        raise ExtractionError("empty CSV")
+
+    header = [c.strip().lower() for c in next(csv.reader([lines[0]]))]
+    # Multi-row line-item CSV used by INV-1007 / INV-1015
+    if "item" in header and ("qty" in header or "quantity" in header):
+        return _from_tabular_csv(raw, source_path, header)
+
+    # Key/value format: field,value
+    if header[:2] == ["field", "value"] or (len(header) == 2 and "field" in header[0]):
+        kv: dict[str, str] = {}
+        items: list[LineItem] = []
+        pending_item: dict[str, str] = {}
+        reader = csv.reader(StringIO(raw))
+        next(reader, None)
+        for row in reader:
+            if len(row) < 2:
+                continue
+            key, value = row[0].strip().lower(), row[1].strip()
+            if key in {"item", "sku"}:
+                if pending_item.get("item"):
+                    items.append(
+                        LineItem(
+                            sku=pending_item["item"],
+                            quantity=int(pending_item.get("quantity") or 0),
+                            unit_price=_optional_decimal(pending_item.get("unit_price")),
+                        )
+                    )
+                pending_item = {"item": value}
+            elif key in {"quantity", "qty", "unit_price", "price"} and pending_item:
+                pending_item[key if key != "qty" else "quantity"] = value
+                if key == "price":
+                    pending_item["unit_price"] = value
+            else:
+                kv[key] = value
+        if pending_item.get("item"):
+            items.append(
+                LineItem(
+                    sku=pending_item["item"],
+                    quantity=int(pending_item.get("quantity") or 0),
+                    unit_price=_optional_decimal(pending_item.get("unit_price")),
+                )
+            )
+        invoice_id = kv.get("invoice_number") or kv.get("invoice_id") or Path(source_path).stem
+        return Invoice(
+            invoice_id=invoice_id,
+            vendor=kv.get("vendor") or kv.get("supplier") or "Unknown",
+            amount=_to_decimal(kv.get("total") or kv.get("amount")),
+            due_date=_parse_date(kv.get("due_date")),
+            items=tuple(items) if items else (LineItem(sku="UNKNOWN", quantity=0),),
+            source_path=source_path,
+            status=InvoiceStatus.EXTRACTED,
+        )
+
+    return _from_csv_wide_fallback(lines, header, source_path)
+
+
+def _from_tabular_csv(raw: str, source_path: str, header: list[str]) -> Invoice:
+    """Parse invoice CSVs with one row per line item plus total footer rows."""
+    reader = csv.reader(StringIO(raw))
+    next(reader, None)
+    items: list[LineItem] = []
+    invoice_id = Path(source_path).stem
+    vendor = "Unknown"
+    amount = Decimal("0")
+    due_date = None
+    item_idx = header.index("item")
+    qty_idx = header.index("qty") if "qty" in header else header.index("quantity")
+    price_idx = (
+        header.index("unit price")
+        if "unit price" in header
+        else (header.index("unit_price") if "unit_price" in header else -1)
+    )
+    inv_idx = header.index("invoice number") if "invoice number" in header else -1
+    vendor_idx = header.index("vendor") if "vendor" in header else -1
+    due_idx = header.index("due date") if "due date" in header else -1
+
+    for row in reader:
+        if not row or all(not c.strip() for c in row):
+            continue
+        # Footer rows: ,,,,,,Total:,15525.00
+        joined = ",".join(row).lower()
+        if "total" in joined and "subtotal" not in joined and "line total" not in joined:
+            for cell in reversed(row):
+                if cell.strip():
+                    try:
+                        maybe = _to_decimal(cell)
+                    except ExtractionError:
+                        continue
+                    if maybe > 0:
+                        amount = maybe
+                        break
+            continue
+        if "subtotal" in joined or "tax" in joined:
+            continue
+        item_name = row[item_idx].strip() if item_idx < len(row) else ""
+        if not item_name:
+            continue
+        qty = int(float(row[qty_idx])) if qty_idx < len(row) and row[qty_idx].strip() else 0
+        price = (
+            _optional_decimal(row[price_idx]) if price_idx >= 0 and price_idx < len(row) else None
+        )
+        items.append(LineItem(sku=item_name, quantity=qty, unit_price=price))
+        if inv_idx >= 0 and inv_idx < len(row) and row[inv_idx].strip():
+            invoice_id = row[inv_idx].strip()
+        if vendor_idx >= 0 and vendor_idx < len(row) and row[vendor_idx].strip():
+            vendor = row[vendor_idx].strip()
+        if due_idx >= 0 and due_idx < len(row) and row[due_idx].strip():
+            due_date = _parse_date(row[due_idx])
+
+    if not items:
+        raise ExtractionError("tabular CSV has no line items")
+    if amount == 0:
+        priced = [i for i in items if i.unit_price is not None]
+        if not priced:
+            raise ExtractionError("invalid_amount: tabular CSV missing total and line unit prices")
+        amount = sum((i.unit_price or Decimal("0")) * i.quantity for i in priced)
+        if amount == 0:
+            raise ExtractionError("invalid_amount: tabular CSV total resolved to 0")
+    return Invoice(
+        invoice_id=invoice_id,
+        vendor=vendor,
+        amount=amount,
+        due_date=due_date,
+        items=tuple(items),
+        source_path=source_path,
+        status=InvoiceStatus.EXTRACTED,
+    )
+
+
+def _from_csv_wide_fallback(lines: list[str], header: list[str], source_path: str) -> Invoice:
+    data_row = next(csv.reader([lines[1]]), []) if len(lines) > 1 else []
+
+    def col(name: str, default: str = "") -> str:
+        try:
+            idx = header.index(name)
+            return data_row[idx].strip() if idx < len(data_row) else default
+        except ValueError:
+            return default
+
+    return Invoice(
+        invoice_id=col("invoice_id") or col("invoice_number") or Path(source_path).stem,
+        vendor=col("vendor") or col("supplier") or "Unknown",
+        amount=_to_decimal(col("amount") or col("total") or None),
+        due_date=_parse_date(col("due_date")),
+        items=(
+            LineItem(
+                sku=col("item") or col("sku") or "UNKNOWN",
+                quantity=int(col("quantity") or col("qty") or "0"),
+                unit_price=_optional_decimal(col("unit_price") or col("price") or None),
+            ),
+        ),
+        source_path=source_path,
+        status=InvoiceStatus.EXTRACTED,
+    )
+
+
+def _from_xml(raw: str, source_path: str) -> Invoice:
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as exc:
+        raise ExtractionError(f"invalid XML: {exc}") from exc
+
+    def find_text(path: str) -> str | None:
+        node = root.find(path)
+        if node is not None and node.text:
+            return node.text.strip()
+        # also try anywhere
+        for el in root.iter():
+            if el.tag.endswith(path.split("/")[-1]) and el.text:
+                return el.text.strip()
+        return None
+
+    invoice_id = (
+        find_text("header/invoice_number") or find_text("invoice_number") or Path(source_path).stem
+    )
+    vendor = find_text("header/vendor") or find_text("vendor") or "Unknown"
+    amount = _to_decimal(find_text("totals/total") or find_text("total"))
+    due_date = _parse_date(find_text("header/due_date") or find_text("due_date"))
+
+    items: list[LineItem] = []
+    for item_el in root.findall(".//line_items/item") or root.findall(".//item"):
+        name = None
+        qty = 0
+        price = None
+        for child in item_el:
+            tag = child.tag.lower()
+            if tag in {"name", "sku", "item"}:
+                name = (child.text or "").strip()
+            elif tag == "quantity":
+                qty = int((child.text or "0").strip())
+            elif tag in {"unit_price", "price"}:
+                price = _optional_decimal(child.text)
+        if name:
+            items.append(LineItem(sku=name, quantity=qty, unit_price=price))
+
+    if not items:
+        raise ExtractionError("XML invoice has no line items")
+
+    return Invoice(
+        invoice_id=invoice_id,
+        vendor=vendor,
+        amount=amount,
+        due_date=due_date,
+        items=tuple(items),
+        source_path=source_path,
+        status=InvoiceStatus.EXTRACTED,
+    )
+
+
+_SKU_DENYLIST = {
+    "invoice",
+    "vendor",
+    "total",
+    "amount",
+    "subtotal",
+    "tax",
+    "net",
+    "date",
+    "due",
+    "from",
+    "to",
+    "payment",
+    "terms",
+    "qty",
+    "item",
+    "items",
+    "description",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+}
+
+
+def _from_text(raw: str, source_path: str) -> Invoice:
+    invoice_id = (
+        _find(r"Invoice\s*(?:Number|#|Num)?\s*[:#]?\s*(INV-?\d+|\d{3,})", raw)
+        or _find(r"INV\s*NO\s*[:#]?\s*(INV[-\s]?\d+|\d{3,})", raw)
+        or _find(r"Inv\s*#\s*[:#]?\s*(\d+)", raw)
+        or Path(source_path).stem
+    )
+    invoice_id = str(invoice_id).replace(" ", "").upper()
+    if invoice_id and not invoice_id.startswith("INV") and invoice_id.isdigit():
+        invoice_id = f"INV-{invoice_id}"
+    if invoice_id.startswith("INV") and not invoice_id.startswith("INV-"):
+        invoice_id = invoice_id.replace("INV", "INV-", 1)
+
+    vendor = (
+        _find(r"Vendor\s*[:]\s*(.+)", raw)
+        or _find(r"Vndr\s*[:]\s*(.+)", raw)
+        or _find(r"FROM\s*[:]\s*(.+)", raw)
+        or _find(r"From\s*[:]\s*(.+)", raw)
+        or "Unknown"
+    )
+    # strip email-only From lines that aren't vendors
+    if "@" in vendor and "Vendor" not in raw:
+        vendor = _find(r"Vendor\s*[:]\s*(.+)", raw) or vendor
+
+    amount_raw = _find(
+        r"(?:Total\s*Amount|Amount\s*Due|(?<![A-Za-z])TOTAL|(?<![A-Za-z])Total|(?<![A-Za-z])Amt)\s*[:\s]+\$?([\d,]+\.?\d*)",
+        raw,
+    )
+    if not amount_raw:
+        raise ExtractionError("invalid_amount: missing total/amount in text invoice")
+    amount = _to_decimal(amount_raw)
+    due_date = _parse_date(_find(r"(?:Due\s*Date|Due\s*Dt|Due)\s*[:]\s*(.+)", raw))
+
+    items: list[LineItem] = []
+    patterns = [
+        r"(?m)^\s*-?\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(?:qty[:\s]+|x\s*)?(\d+)\s*(?:@|x)?\s*\$?([\d,.]+)?",
+        r"(?m)^\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(\d+)\s+\$([\d,.]+)\s+\$([\d,.]+)",
+        r"Item[:\s]+([A-Za-z0-9_\-]+).*?Qty[:\s]+(\d+)",
+        r"([A-Za-z][A-Za-z0-9_\-]*)\s+x(\d+)\s+\$?([\d,.]+)",
+    ]
+    seen: set[tuple[str, int]] = set()
+    for pat in patterns:
+        for m in re.finditer(pat, raw, re.IGNORECASE):
+            sku = m.group(1).strip()
+            if sku.lower() in _SKU_DENYLIST:
+                continue
+            if len(sku) < 3:
+                continue
+            qty = int(m.group(2))
+            price = (
+                _optional_decimal(m.group(3))
+                if m.lastindex and m.lastindex >= 3 and m.group(3)
+                else None
+            )
+            key = (sku, qty)
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(LineItem(sku=sku, quantity=qty, unit_price=price))
+
+    # Galatiq style: WidgetA    qty: 10
+    for m in re.finditer(
+        r"([A-Za-z][A-Za-z0-9_\-]*)\s+qty[:\s]+(\d+)",
+        raw,
+        re.IGNORECASE,
+    ):
+        sku = m.group(1)
+        if sku.lower() in _SKU_DENYLIST:
+            continue
+        qty = int(m.group(2))
+        key = (sku, qty)
+        if key not in seen:
+            seen.add(key)
+            items.append(LineItem(sku=sku, quantity=qty))
+
+    # Spaced SKUs: "Widget A", "Gadget X"
+    for m in re.finditer(
+        r"(Widget|Gadget)\s+([A-Za-z0-9]+)\s+(\d+)",
+        raw,
+        re.IGNORECASE,
+    ):
+        sku = f"{m.group(1)}{m.group(2)}"
+        qty = int(m.group(3))
+        key = (sku, qty)
+        if key not in seen:
+            seen.add(key)
+            items.append(LineItem(sku=sku, quantity=qty))
+
+    if not items:
+        # last resort: known SKUs mentioned with nearby numbers
+        for sku in (
+            "WidgetA",
+            "WidgetB",
+            "GadgetX",
+            "FakeItem",
+            "SuperGizmo",
+            "MegaSprocket",
+            "WidgetC",
+        ):
+            m = re.search(rf"{sku}\D+(\d+)", raw, re.IGNORECASE)
+            if m:
+                items.append(LineItem(sku=sku, quantity=int(m.group(1))))
+
+    if not items:
+        raise ExtractionError("could not extract line items from text")
+
+    return Invoice(
+        invoice_id=str(invoice_id).strip(),
+        vendor=vendor.strip().split("\n")[0].strip(),
+        amount=amount,
+        due_date=due_date,
+        items=tuple(items),
+        source_path=source_path,
+        status=InvoiceStatus.EXTRACTED,
+    )
+
+
+def _find(pattern: str, text: str) -> str | None:
+    m = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+# Suffix → parser (extensible registry; default text handler for unknown suffixes).
+FORMAT_REGISTRY: dict[str, Any] = {
+    ".json": _from_json,
+    ".csv": _from_csv,
+    ".xml": _from_xml,
+    ".txt": _from_text,
+    ".pdf": _from_text,  # pdfplumber text is parsed as plain text
+}

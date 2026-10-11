@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  offline:
+    name: Offline quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Guard — core/ must not reappear
+        run: |
+          if [ -d core ]; then
+            echo "FATAL: dead legacy package core/ must not exist"
+            exit 1
+          fi
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Pytest (offline; skip live_grok)
+        env:
+          GALATIQ_PERMIT_SECRET: ci-test-secret-do-not-use-in-prod
+        run: uv run pytest -q -m "not live_grok"
+
+  live_grok:
+    name: Live Grok smoke (optional)
+    runs-on: ubuntu-latest
+    needs: offline
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Live Grok contract
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          XAI_MODEL: grok-3
+          GALATIQ_PERMIT_SECRET: ci-test-secret-do-not-use-in-prod
+        run: |
+          if [ -z "$XAI_API_KEY" ]; then
+            echo "No XAI_API_KEY secret — skipping live Grok"
+            exit 0
+          fi
+          uv run pytest -q -m live_grok

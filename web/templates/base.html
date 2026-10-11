@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Galatiq AP{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-dot"></span> Galatiq</div>
+      <div class="brand-sub">AP Control Centre</div>
+      <nav class="nav">
+        <a href="/" class="{% if nav == 'home' %}active{% endif %}">Dashboard</a>
+        <a href="/capture" class="{% if nav == 'capture' %}active{% endif %}">Capture</a>
+        <a href="/exceptions" class="{% if nav == 'exceptions' %}active{% endif %}">Exceptions</a>
+        {% if role == 'vp' %}
+        <a href="/approvals" class="{% if nav == 'approvals' %}active{% endif %}">Approvals</a>
+        {% endif %}
+        <a href="/audit" class="{% if nav == 'audit' %}active{% endif %}">Audit</a>
+      </nav>
+      <div class="role-box">
+        <form method="post" action="/session">
+          <label for="role">Working as</label>
+          <select id="role" name="role" onchange="this.form.submit()">
+            <option value="analyst" {% if role == 'analyst' %}selected{% endif %}>AP Analyst</option>
+            <option value="vp" {% if role == 'vp' %}selected{% endif %}>VP Approver</option>
+          </select>
+          <label for="llm" style="margin-top:0.75rem">Engine</label>
+          <select id="llm" name="llm" onchange="this.form.submit()">
+            <option value="stub" {% if llm == 'stub' %}selected{% endif %}>Offline stub</option>
+            <option value="grok" {% if llm == 'grok' %}selected{% endif %}>Live Grok</option>
+          </select>
+        </form>
+      </div>
+    </aside>
+    <main class="main">
+      {% if flash %}
+      <div class="flash {{ flash.kind }}">{{ flash.message }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

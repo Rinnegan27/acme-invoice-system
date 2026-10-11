@@ -72,3 +72,11 @@ CREATE TABLE IF NOT EXISTS alerts (
     correlation_id TEXT,
     created_at  REAL    NOT NULL DEFAULT (strftime('%s','now'))
 );
+
+-- Durable PaymentPermit nonces (survive process restart)
+CREATE TABLE IF NOT EXISTS consumed_permits (
+    nonce           TEXT    PRIMARY KEY,
+    invoice_id      TEXT    NOT NULL,
+    correlation_id  TEXT    NOT NULL,
+    consumed_at     REAL    NOT NULL DEFAULT (strftime('%s','now'))
+);

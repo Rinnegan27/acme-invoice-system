@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<invoice>
+  <header>
+    <invoice_number>INV-1127</invoice_number>
+    <vendor>Precision Parts Ltd.</vendor>
+    <date>2026-02-01</date>
+    <due_date>2026-03-15</due_date>
+    <currency>USD</currency>
+  </header>
+  <line_items>
+    <item>
+      <name>WidgetC</name>
+      <quantity>2</quantity>
+      <unit_price>300</unit_price>
+    </item>
+  </line_items>
+  <totals>
+    <subtotal>600</subtotal>
+    <tax_amount>0</tax_amount>
+    <total>600</total>
+  </totals>
+  <payment_terms>Net 30</payment_terms>
+</invoice>

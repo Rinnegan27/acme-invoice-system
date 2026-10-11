@@ -1,0 +1,15 @@
+field,value
+invoice_number,INV-1107
+vendor,MegaWidgets Corp
+date,2026-02-01
+due_date,2026-03-15
+item,WidgetA
+quantity,3
+unit_price,250
+item,WidgetB
+quantity,2
+unit_price,500
+subtotal,1750
+tax,0
+total,1750
+payment_terms,Net 30

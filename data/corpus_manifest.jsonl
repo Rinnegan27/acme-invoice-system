@@ -1,0 +1,100 @@
+{"category": "stp_alias", "expect_status": "paid", "file": "invoice1.txt", "format": "txt", "invoice_id": "INV-1001", "notes": "Case CLI alias of INV-1001"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1001.txt", "format": "txt", "invoice_id": "INV-1001"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1002.txt", "format": "txt", "invoice_id": "INV-1002"}
+{"category": "zero_stock", "expect_issue_substr": "zero_stock", "expect_status": "rejected", "file": "invoice_1003.txt", "format": "txt", "invoice_id": "INV-1003"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1004.json", "format": "json", "invoice_id": "INV-1004"}
+{"category": "stp_revised", "expect_status": "paid", "file": "invoice_1004_revised.json", "format": "json", "invoice_id": "INV-1004"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1005.json", "format": "json", "invoice_id": "INV-1005"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1006.csv", "format": "csv", "invoice_id": "INV-1006"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1007.csv", "format": "csv", "invoice_id": "INV-1007"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1008.txt", "format": "txt", "invoice_id": "INV-1008"}
+{"category": "integrity", "expect_issue_substr": "invalid_quantity", "expect_status": "rejected", "file": "invoice_1009.json", "format": "json", "invoice_id": "INV-1009"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1010.txt", "format": "txt", "invoice_id": "INV-1010"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1011.txt", "format": "txt", "invoice_id": "INV-1011"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1011.pdf", "format": "pdf", "invoice_id": "INV-1011", "notes": "TXT twin preferred by --all; still golden when processed alone"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1012.txt", "format": "txt", "invoice_id": "INV-1012"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1012.pdf", "format": "pdf", "invoice_id": "INV-1012"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1013.json", "format": "json", "invoice_id": "INV-1013"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1013.pdf", "format": "pdf", "invoice_id": "INV-1013"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1014.xml", "format": "xml", "invoice_id": "INV-1014"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1015.csv", "format": "csv", "invoice_id": "INV-1015"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1016.json", "format": "json", "invoice_id": "INV-1016"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1100.txt", "format": "txt", "invoice_id": "INV-1100"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1101.json", "format": "json", "invoice_id": "INV-1101"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1102.csv", "format": "csv", "invoice_id": "INV-1102"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1103.xml", "format": "xml", "invoice_id": "INV-1103"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1104.pdf", "format": "pdf", "invoice_id": "INV-1104"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1105.txt", "format": "txt", "invoice_id": "INV-1105"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1106.json", "format": "json", "invoice_id": "INV-1106"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1107.csv", "format": "csv", "invoice_id": "INV-1107"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1108.txt", "format": "txt", "invoice_id": "INV-1108"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1109.json", "format": "json", "invoice_id": "INV-1109"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1110.txt", "format": "txt", "invoice_id": "INV-1110"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1111.json", "format": "json", "invoice_id": "INV-1111"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1112.csv", "format": "csv", "invoice_id": "INV-1112"}
+{"category": "stp", "expect_status": "paid", "file": "invoice_1113.xml", "format": "xml", "invoice_id": "INV-1113"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1114.json", "format": "json", "invoice_id": "INV-1114"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1115.csv", "format": "csv", "invoice_id": "INV-1115"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1116.xml", "format": "xml", "invoice_id": "INV-1116"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1117.pdf", "format": "pdf", "invoice_id": "INV-1117"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1118.txt", "format": "txt", "invoice_id": "INV-1118"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1119.json", "format": "json", "invoice_id": "INV-1119"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1120.csv", "format": "csv", "invoice_id": "INV-1120"}
+{"category": "insufficient_stock", "expect_issue_substr": "insufficient_stock", "expect_status": "rejected", "file": "invoice_1121.txt", "format": "txt", "invoice_id": "INV-1121"}
+{"category": "zero_stock", "expect_issue_substr": "zero_stock", "expect_status": "rejected", "file": "invoice_1122.csv", "format": "csv", "invoice_id": "INV-1122"}
+{"category": "zero_stock", "expect_issue_substr": "zero_stock", "expect_status": "rejected", "file": "invoice_1123.xml", "format": "xml", "invoice_id": "INV-1123"}
+{"category": "zero_stock", "expect_issue_substr": "zero_stock", "expect_status": "rejected", "file": "invoice_1124.pdf", "format": "pdf", "invoice_id": "INV-1124"}
+{"category": "zero_stock", "expect_issue_substr": "zero_stock", "expect_status": "rejected", "file": "invoice_1125.txt", "format": "txt", "invoice_id": "INV-1125"}
+{"category": "zero_stock", "expect_issue_substr": "zero_stock", "expect_status": "rejected", "file": "invoice_1126.json", "format": "json", "invoice_id": "INV-1126"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1127.xml", "format": "xml", "invoice_id": "INV-1127"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1128.pdf", "format": "pdf", "invoice_id": "INV-1128"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1129.txt", "format": "txt", "invoice_id": "INV-1129"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1130.json", "format": "json", "invoice_id": "INV-1130"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1131.csv", "format": "csv", "invoice_id": "INV-1131"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1132.txt", "format": "txt", "invoice_id": "INV-1132"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1133.json", "format": "json", "invoice_id": "INV-1133"}
+{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1134.txt", "format": "txt", "invoice_id": "INV-1134"}
+{"category": "invalid_quantity", "expect_issue_substr": "invalid_quantity", "expect_status": "rejected", "file": "invoice_1135.json", "format": "json", "invoice_id": "INV-1135"}
+{"category": "invalid_quantity", "expect_issue_substr": "invalid_quantity", "expect_status": "rejected", "file": "invoice_1136.json", "format": "json", "invoice_id": "INV-1136"}
+{"category": "invalid_quantity", "expect_issue_substr": "invalid_quantity", "expect_status": "rejected", "file": "invoice_1137.json", "format": "json", "invoice_id": "INV-1137"}
+{"category": "invalid_quantity", "expect_issue_substr": "invalid_quantity", "expect_status": "rejected", "file": "invoice_1138.csv", "format": "csv", "invoice_id": "INV-1138"}
+{"category": "invalid_quantity", "expect_issue_substr": "invalid_quantity", "expect_status": "rejected", "file": "invoice_1139.csv", "format": "csv", "invoice_id": "INV-1139"}
+{"category": "missing_vendor", "expect_issue_substr": "missing_vendor", "expect_status": "rejected", "file": "invoice_1140.json", "format": "json", "invoice_id": "INV-1140"}
+{"category": "missing_vendor", "expect_issue_substr": "missing_vendor", "expect_status": "rejected", "file": "invoice_1141.txt", "format": "txt", "invoice_id": "INV-1141"}
+{"category": "missing_vendor", "expect_issue_substr": "missing_vendor", "expect_status": "rejected", "file": "invoice_1142.csv", "format": "csv", "invoice_id": "INV-1142"}
+{"category": "missing_vendor", "expect_issue_substr": "missing_vendor", "expect_status": "rejected", "file": "invoice_1143.xml", "format": "xml", "invoice_id": "INV-1143"}
+{"category": "negative_amount", "expect_issue_substr": "negative_amount", "expect_status": "rejected", "file": "invoice_1144.json", "format": "json", "invoice_id": "INV-1144"}
+{"category": "negative_amount", "expect_issue_substr": "negative_amount", "expect_status": "rejected", "file": "invoice_1145.csv", "format": "csv", "invoice_id": "INV-1145"}
+{"category": "negative_amount", "expect_issue_substr": "negative_amount", "expect_status": "rejected", "file": "invoice_1146.xml", "format": "xml", "invoice_id": "INV-1146"}
+{"category": "amount_line_mismatch", "expect_issue_substr": "amount_line_mismatch", "expect_status": "rejected", "file": "invoice_1147.json", "format": "json", "invoice_id": "INV-1147"}
+{"category": "amount_line_mismatch", "expect_issue_substr": "amount_line_mismatch", "expect_status": "rejected", "file": "invoice_1148.csv", "format": "csv", "invoice_id": "INV-1148"}
+{"category": "amount_line_mismatch", "expect_issue_substr": "amount_line_mismatch", "expect_status": "rejected", "file": "invoice_1149.xml", "format": "xml", "invoice_id": "INV-1149"}
+{"category": "amount_line_mismatch", "expect_issue_substr": "amount_line_mismatch", "expect_status": "rejected", "file": "invoice_1150.json", "format": "json", "invoice_id": "INV-1150"}
+{"category": "invalid_sku_charset", "expect_issue_substr": "invalid_sku_charset", "expect_status": "rejected", "file": "invoice_1151.json", "format": "json", "invoice_id": "INV-1151"}
+{"category": "invalid_sku_charset", "expect_issue_substr": "invalid_sku_charset", "expect_status": "rejected", "file": "invoice_1152.xml", "format": "xml", "invoice_id": "INV-1152"}
+{"category": "invalid_sku_charset", "expect_issue_substr": "invalid_sku_charset", "expect_status": "rejected", "file": "invoice_1153.csv", "format": "csv", "invoice_id": "INV-1153"}
+{"category": "negative_unit_price", "expect_issue_substr": "negative_unit_price", "expect_status": "rejected", "file": "invoice_1154.json", "format": "json", "invoice_id": "INV-1154"}
+{"category": "negative_unit_price", "expect_issue_substr": "negative_unit_price", "expect_status": "rejected", "file": "invoice_1155.csv", "format": "csv", "invoice_id": "INV-1155"}
+{"category": "suspicious_vendor_text", "expect_issue_substr": "suspicious_vendor_text", "expect_status": "rejected", "file": "invoice_1156.txt", "format": "txt", "invoice_id": "INV-1156"}
+{"category": "suspicious_vendor_text", "expect_issue_substr": "suspicious_vendor_text", "expect_status": "rejected", "file": "invoice_1157.json", "format": "json", "invoice_id": "INV-1157"}
+{"category": "suspicious_vendor_text", "expect_issue_substr": "suspicious_vendor_text", "expect_status": "rejected", "file": "invoice_1158.csv", "format": "csv", "invoice_id": "INV-1158"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1159.json", "format": "json", "invoice_id": "INV-1159", "notes": "In-stock HV; stub VP reflection approves"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1160.txt", "format": "txt", "invoice_id": "INV-1160", "notes": "In-stock HV; stub VP reflection approves"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1161.csv", "format": "csv", "invoice_id": "INV-1161", "notes": "In-stock HV; stub VP reflection approves"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1162.xml", "format": "xml", "invoice_id": "INV-1162", "notes": "In-stock HV; stub VP reflection approves"}
+{"category": "high_value", "expect_status": "paid", "file": "invoice_1163.pdf", "format": "pdf", "invoice_id": "INV-1163", "notes": "In-stock HV; stub VP reflection approves"}
+{"category": "messy_ocr", "expect_status": "paid", "file": "invoice_1164.txt", "format": "txt", "invoice_id": "INV-1164", "notes": "Typo labels; OfflineLLM self-correct"}
+{"category": "messy_ocr", "expect_status": "paid", "file": "invoice_1165.pdf", "format": "pdf", "invoice_id": "INV-1165", "notes": "Typo labels; OfflineLLM self-correct"}
+{"category": "messy_ocr", "expect_status": "paid", "file": "invoice_1166.txt", "format": "txt", "invoice_id": "INV-1166", "notes": "Typo labels; OfflineLLM self-correct"}
+{"category": "messy_ocr", "expect_status": "paid", "file": "invoice_1167.pdf", "format": "pdf", "invoice_id": "INV-1167", "notes": "Typo labels; OfflineLLM self-correct"}
+{"category": "messy_ocr", "expect_status": "paid", "file": "invoice_1168.txt", "format": "txt", "invoice_id": "INV-1168", "notes": "Typo labels; OfflineLLM self-correct"}
+{"category": "email_body", "expect_status": "paid", "file": "invoice_1169.txt", "format": "txt", "invoice_id": "INV-1169"}
+{"category": "email_body", "expect_status": "paid", "file": "invoice_1170.txt", "format": "txt", "invoice_id": "INV-1170"}
+{"category": "email_body", "expect_status": "paid", "file": "invoice_1171.txt", "format": "txt", "invoice_id": "INV-1171"}
+{"allow_statuses": ["failed", "rejected", "unknown"], "category": "malformed", "expect_status": "failed", "file": "invoice_1172_bad.json", "format": "json", "invoice_id": "INV-1172", "notes": "Unparseable payload; must not crash runner"}
+{"allow_statuses": ["failed", "rejected", "unknown"], "category": "malformed", "expect_status": "failed", "file": "invoice_1173_bad.xml", "format": "xml", "invoice_id": "INV-1173", "notes": "Unparseable payload; must not crash runner"}
+{"allow_statuses": ["failed", "rejected", "unknown"], "category": "malformed", "expect_status": "failed", "file": "invoice_1174_bad.csv", "format": "csv", "invoice_id": "INV-1174", "notes": "Unparseable payload; must not crash runner"}
+{"category": "tax_fees", "expect_status": "paid", "file": "invoice_1175.json", "format": "json", "invoice_id": "INV-1175", "notes": "Total > line sum allowed (tax/fees)"}
+{"category": "tax_fees", "expect_status": "paid", "file": "invoice_1176.txt", "format": "txt", "invoice_id": "INV-1176", "notes": "Total > line sum allowed (tax/fees)"}
+{"category": "tax_fees", "expect_status": "paid", "file": "invoice_1177.csv", "format": "csv", "invoice_id": "INV-1177", "notes": "Total > line sum allowed (tax/fees)"}
+{"category": "tax_fees", "expect_status": "paid", "file": "invoice_1178.xml", "format": "xml", "invoice_id": "INV-1178", "notes": "Total > line sum allowed (tax/fees)"}

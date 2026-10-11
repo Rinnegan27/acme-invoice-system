@@ -1,0 +1,31 @@
+# Secrets — never commit
+.env
+.streamlit/secrets.toml
+
+# Deprecated Streamlit prototype (product UI is web/)
+ui/
+.streamlit/
+
+# Local runtime / caches
+.venv/
+venv/
+.galatiq_runtime/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+events.jsonl
+.DS_Store
+dist/
+build/
+*.log
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Notebook checkpoints / local scratch
+notebooks/.ipynb_checkpoints/
+*.tmp

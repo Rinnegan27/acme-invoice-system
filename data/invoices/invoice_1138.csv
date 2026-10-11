@@ -1,0 +1,12 @@
+field,value
+invoice_number,INV-1138
+vendor,Precision Parts Ltd.
+date,2026-02-01
+due_date,2026-03-15
+item,WidgetA
+quantity,-3
+unit_price,250
+subtotal,-750
+tax,0
+total,-750
+payment_terms,Net 30

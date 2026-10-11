@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ record.invoice_id }} · Galatiq AP{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1 class="mono" style="font-family:var(--mono)">{{ record.invoice_id }}</h1>
+    <p>{{ record.vendor }} · ${{ '%.2f'|format(record.amount|float) }}</p>
+  </div>
+  <div>
+    <span class="risk-mark {{ stage_meta.risk }}" style="height:1.4rem;width:0.4rem"></span>
+    <span style="font-size:0.82rem;color:var(--muted);margin-left:0.35rem">{{ stage_meta.risk }} risk</span>
+  </div>
+</div>
+
+<div class="invoice-stages">
+  {% for s in stage_meta.steps %}
+  <div class="is {% if s.done %}done{% endif %} {% if s.current %}current{% endif %}">
+    <span class="n">{{ s.n }}</span>{{ s.name }}
+  </div>
+  {% endfor %}
+</div>
+
+{% if record.issues or record.needs_override %}
+<div class="findings-callout">
+  {% if record.needs_override %}Low-confidence extract — correct fields before payment. {% endif %}
+  {% if record.issues %}<strong>Findings:</strong> {{ record.issues|join(', ') }}{% endif %}
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-h"><h2>Source</h2><span style="color:var(--muted);font-size:0.72rem">Untrusted</span></div>
+    <div class="panel-b"><div class="source-box">{{ record.raw_text }}</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-h">
+      <h2>Structured fields</h2>
+      <span style="color:var(--muted);font-size:0.72rem">Conf {{ '%.0f'|format(record.confidence * 100) }}%</span>
+    </div>
+    <div class="panel-b">
+      <form method="post" action="/invoices/{{ record.id }}/override">
+        <div class="field"><label>Invoice number</label><input name="invoice_id" value="{{ record.invoice_id }}" /></div>
+        <div class="field"><label>Vendor</label><input name="vendor" value="{{ record.vendor }}" /></div>
+        <div class="field"><label>Amount</label><input name="amount" value="{{ record.amount }}" /></div>
+        <div class="field"><label>Due date</label><input name="due_date" value="{{ record.due_date or '' }}" placeholder="YYYY-MM-DD" /></div>
+        <div class="field">
+          <label>Line items (SKU,qty,unit_price)</label>
+          <textarea name="items_text" rows="4">{% for i in record.items %}{{ i.sku }},{{ i.quantity }},{{ i.unit_price or '' }}
+{% endfor %}</textarea>
+        </div>
+        <div class="field"><label>Notes</label><textarea name="analyst_notes" rows="2">{{ record.analyst_notes }}</textarea></div>
+        <button class="primary" type="submit">Save corrections</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-h"><h2>Audit trail</h2></div>
+  <div class="panel-b">
+    {% if events %}
+    <ul class="timeline">
+      {% for e in events %}
+      <li>
+        <code>{{ e.event_type }}</code>
+        <span class="actor">{{ e.actor_role }}</span>
+        <span class="detail">{{ e.payload }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty">No events yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="decision-bar">
+  <div class="meta">Decide as <strong>{{ role }}</strong>
+    {% if role == 'analyst' and record.high_value %} · High-value → VP required{% endif %}
+  </div>
+  <div class="actions">
+    {% if role == 'analyst' %}
+    <form method="post" action="/invoices/{{ record.id }}/pay"><button class="primary" type="submit" {% if record.hard_blocked or record.high_value %}disabled{% endif %}>Approve &amp; pay</button></form>
+    <form method="post" action="/invoices/{{ record.id }}/escalate"><button type="submit">Escalate</button></form>
+    <form method="post" action="/invoices/{{ record.id }}/decline"><button type="submit">Decline</button></form>
+    {% else %}
+    <form method="post" action="/invoices/{{ record.id }}/vp-pay"><button class="primary" type="submit" {% if record.hard_blocked %}disabled{% endif %}>VP approve &amp; pay</button></form>
+    <form method="post" action="/invoices/{{ record.id }}/decline"><button type="submit">Decline</button></form>
+    <form method="post" action="/invoices/{{ record.id }}/return"><button type="submit">Return to analyst</button></form>
+    {% endif %}
+    <a class="btn btn-ghost" href="{{ back_href }}">Back</a>
+  </div>
+</div>
+{% endblock %}

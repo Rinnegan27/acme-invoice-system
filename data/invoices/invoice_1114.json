@@ -1,0 +1,20 @@
+{
+  "invoice_number": "INV-1114",
+  "vendor": {
+    "name": "Summit Manufacturing Co."
+  },
+  "date": "2026-02-01",
+  "due_date": "2026-03-15",
+  "line_items": [
+    {
+      "item": "GadgetX",
+      "quantity": 10,
+      "unit_price": 750.0
+    }
+  ],
+  "subtotal": 7500.0,
+  "tax_amount": 0.0,
+  "total": 7500.0,
+  "currency": "USD",
+  "payment_terms": "Net 30"
+}

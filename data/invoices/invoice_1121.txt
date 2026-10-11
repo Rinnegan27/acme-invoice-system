@@ -1,0 +1,15 @@
+INVOICE
+
+Vendor: Northwind Parts
+Invoice Number: INV-1121
+Date: 2026-02-01
+Due Date: 2026-03-15
+
+Items:
+  GadgetX    qty: 17    unit price: $750
+
+Subtotal: $12750
+Tax: $0
+Total Amount: $12750
+
+Payment Terms: Net 30

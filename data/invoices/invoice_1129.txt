@@ -1,0 +1,15 @@
+INVOICE
+
+Vendor: TechParts International
+Invoice Number: INV-1129
+Date: 2026-02-01
+Due Date: 2026-03-15
+
+Items:
+  MegaSprocket    qty: 2    unit price: $300
+
+Subtotal: $600
+Tax: $0
+Total Amount: $600
+
+Payment Terms: Net 30

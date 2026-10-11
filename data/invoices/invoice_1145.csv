@@ -1,0 +1,12 @@
+field,value
+invoice_number,INV-1145
+vendor,Summit Manufacturing Co.
+date,2026-02-01
+due_date,2026-03-15
+item,WidgetA
+quantity,1
+unit_price,250
+subtotal,-100.00
+tax,0
+total,-100.00
+payment_terms,Net 30

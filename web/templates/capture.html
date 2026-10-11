@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Capture · Galatiq AP{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>Capture</h1>
+    <p>Ingest invoices into the workbench. Stages 1–2 run on capture; approve &amp; pay from Exceptions or Approvals.</p>
+  </div>
+</div>
+
+<div class="capture-grid">
+  <div class="panel">
+    <div class="panel-h"><h2>Upload files</h2></div>
+    <div class="panel-b">
+      <form method="post" action="/capture/upload" enctype="multipart/form-data">
+        <div class="field">
+          <label>Invoice files</label>
+          <input type="file" name="files" multiple accept=".txt,.json,.csv,.xml,.pdf" required />
+        </div>
+        <button class="primary" type="submit">Capture &amp; validate</button>
+      </form>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h2>Sample corpus</h2></div>
+    <div class="panel-b">
+      <p style="color:var(--muted);margin:0 0 0.85rem;font-size:0.88rem">
+        {{ sample_count }} case invoices ready. Re-runs update the same rows.
+      </p>
+      <div class="actions">
+        <form method="post" action="/capture/samples">
+          <button class="btn-accent" type="submit">Process all samples</button>
+        </form>
+        <form method="post" action="/capture/reset"
+              onsubmit="return confirm('Clear the entire workbench?');">
+          <button class="btn btn-ghost" type="submit">Clear workbench</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

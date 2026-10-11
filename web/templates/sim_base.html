@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Galatiq Case Lab{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  {% block head %}{% endblock %}
+</head>
+<body class="sim-lab">
+  <header class="sim-header">
+    <div class="sim-brand">
+      <span class="brand-dot"></span>
+      <div>
+        <strong>Galatiq Case Lab</strong>
+        <span>Simulation harness — not part of the AP Control Centre</span>
+      </div>
+    </div>
+    <div class="sim-header-actions">
+      <a class="btn btn-ghost" href="/">← Back to Control Centre</a>
+    </div>
+  </header>
+  <main class="sim-main">
+    {% if flash %}
+    <div class="flash {{ flash.kind }}">{{ flash.message }}</div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

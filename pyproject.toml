@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "galatiq-invoice-system"
+version = "1.1.0"
+description = "Multi-agent invoice processing system for the Galatiq case"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7.0",
+  "python-dotenv>=1.0.0",
+  "openai>=1.40.0",
+  "pdfplumber>=0.11.0",
+  "httpx>=0.27.0",
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "jinja2>=3.1.0",
+  "python-multipart>=0.0.9",
+  "pandas>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "ruff>=0.6.0",
+  "jupyter>=1.0.0",
+  "ipykernel>=6.29.0",
+  "matplotlib>=3.8.0",
+  "nbconvert>=7.16.0",
+  "reportlab>=4.2.0",
+]
+
+[project.scripts]
+galatiq-invoice = "invoice_automation.main:main"
+
+[tool.setuptools.packages.find]
+include = ["invoice_automation*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
+markers = [
+  "smoke: fast CLI + case-sim stub checks for Meta VP smoke gate",
+  "black_box: end-to-end case sim, corpus, and e2e contracts",
+  "white_box: unit tests for parsers, policy, domain, hardening",
+  "live_grok: hits live xAI API (requires real XAI_API_KEY)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+  ".venv",
+  ".galatiq_runtime",
+  "ui",
+  "notebooks",
+  "galatiq_invoice_system.egg-info",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+  "E501",
+  "UP042",  # keep str, Enum for stable serialization of status/stage
+]
+
+[tool.ruff.lint.per-file-ignores]
+"web/app.py" = ["B008"]  # FastAPI File(...) dependency defaults
+"main.py" = ["E402"]
+"scripts/*" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

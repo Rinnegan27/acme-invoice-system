@@ -1,0 +1,11 @@
+INVOCE
+
+Vndr: Acme Industrial Supplies
+Inv #: INV-1166
+Due Dt: 2026-03-15
+
+Itms:
+  WidgetA    qty: 3    unit price: $250
+  WidgetB    qty: 1    unit price: $500
+
+Amt: $1250

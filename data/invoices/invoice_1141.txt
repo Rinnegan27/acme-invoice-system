@@ -1,0 +1,15 @@
+INVOICE
+
+Vendor: Unknown
+Invoice Number: INV-1141
+Date: 2026-02-01
+Due Date: 2026-03-15
+
+Items:
+  WidgetA    qty: 2    unit price: $250
+
+Subtotal: $500
+Tax: $0
+Total Amount: $500
+
+Payment Terms: Net 30

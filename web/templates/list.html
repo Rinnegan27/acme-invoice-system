@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · Galatiq AP{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>{{ page_title }}</h1>
+    <p>{{ page_lead }}</p>
+  </div>
+  {% if nav == 'approvals' and stats %}
+  <div class="actions" style="align-items:flex-end">
+    <div class="summary-pills">
+      <span>{{ stats.total }} in queue</span>
+      <span>{{ stats.hv }} high value</span>
+      <span>{{ stats.esc }} escalated</span>
+      {% if stats.blk %}<span>{{ stats.blk }} blocked</span>{% endif %}
+    </div>
+    {% if show_vp_bulk and role == 'vp' and stats.total %}
+    <form method="post" action="/approvals/approve-all"
+          onsubmit="return confirm('Approve & pay all {{ stats.payable }} payable invoice(s) on the VP desk? Hard-blocked rows will be skipped.');">
+      <button class="primary" type="submit">Approve all</button>
+    </form>
+    <form method="post" action="/approvals/reject-all"
+          onsubmit="return confirm('Reject all {{ stats.total }} invoice(s) on the VP desk? This cannot be undone.');">
+      <button type="submit" style="border-color:var(--danger);color:var(--danger)">Reject all</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <form class="filter-shelf" method="get">
+    <label>Search</label>
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="Vendor or invoice #" />
+
+    {% if show_status_filter %}
+    <label>Status</label>
+    <select name="status">
+      <option value="">All</option>
+      {% for s in status_options %}
+      <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+
+    <label>Amount</label>
+    <select name="amount_band">
+      <option value="" {% if not filters.amount_band %}selected{% endif %}>Any</option>
+      <option value="under10k" {% if filters.amount_band == 'under10k' %}selected{% endif %}>≤ $10k</option>
+      <option value="over10k" {% if filters.amount_band == 'over10k' %}selected{% endif %}>› $10k</option>
+    </select>
+
+    <label>Findings</label>
+    <select name="findings">
+      <option value="" {% if not filters.findings %}selected{% endif %}>Any</option>
+      <option value="1" {% if filters.findings == '1' %}selected{% endif %}>Has findings</option>
+      <option value="0" {% if filters.findings == '0' %}selected{% endif %}>Clean only</option>
+    </select>
+
+    <label class="chip {% if filters.high_value == '1' %}active{% endif %}">
+      <input type="checkbox" name="high_value" value="1" {% if filters.high_value == '1' %}checked{% endif %} onchange="this.form.submit()" />
+      High value
+    </label>
+
+    <button type="submit">Apply</button>
+  </form>
+
+  <div class="panel-b flush">
+    {% if enriched %}
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Invoice</th>
+            <th>Vendor</th>
+            <th>Amount</th>
+            <th>Stage</th>
+            <th>Findings</th>
+            <th>Conf</th>
+            <th>Age</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in enriched %}
+          {% set r = w.record %}
+          <tr onclick="if(!event.target.closest('a')) location.href='/invoices/{{ r.id }}'">
+            <td><span class="risk-mark {{ w.risk }}" title="{{ w.risk }} risk"></span></td>
+            <td class="mono"><a class="rowlink" href="/invoices/{{ r.id }}">{{ r.invoice_id }}</a></td>
+            <td>{{ r.vendor }}</td>
+            <td class="num">${{ '%.2f'|format(w.amount_f) }}</td>
+            <td><span class="stage-pill s{{ w.stage }}">{{ w.stage }}</span></td>
+            <td class="findings">{{ w.findings }}</td>
+            <td>
+              <span class="conf-spark {% if w.conf_pct < 80 %}low{% endif %}"><i style="width:{{ w.conf_pct }}%"></i></span>
+              <span class="conf-label">{{ w.conf_pct }}%</span>
+            </td>
+            <td class="num">{{ '%.1f'|format(r.age_hours) }}h</td>
+            <td><a class="btn btn-ghost" href="/invoices/{{ r.id }}" style="padding:0.2rem 0.45rem;font-size:0.72rem">Open</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">{{ empty_text }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+INVOICE
+
+Vendor: Northwind Parts
+Invoice Number: INV-1108
+Date: 2026-02-01
+Due Date: 2026-03-15
+
+Items:
+  WidgetA    qty: 4    unit price: $250
+  WidgetB    qty: 1    unit price: $500
+
+Subtotal: $1500
+Tax: $0
+Total Amount: $1500
+
+Payment Terms: Net 30

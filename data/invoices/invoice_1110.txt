@@ -1,0 +1,16 @@
+INVOICE
+
+Vendor: Acme Industrial Supplies
+Invoice Number: INV-1110
+Date: 2026-02-01
+Due Date: 2026-03-15
+
+Items:
+  WidgetA    qty: 3    unit price: $250
+  WidgetB    qty: 1    unit price: $500
+
+Subtotal: $1250
+Tax: $0
+Total Amount: $1250
+
+Payment Terms: Net 30

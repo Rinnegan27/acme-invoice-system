@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Galatiq AP{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="/static/dashboard.js" defer></script>
+{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>AP automation pulse</h1>
+    <p>Cash stuck, leakage stopped, and work that should already be paid — not queue vanity counts.</p>
+  </div>
+  <div class="actions">
+    <a class="btn btn-primary" href="/capture">Capture</a>
+    <a class="btn" href="/exceptions">Clear exceptions</a>
+    {% if role == 'vp' %}<a class="btn" href="/approvals">VP desk</a>{% endif %}
+  </div>
+</div>
+
+<div class="kpis kpis-6">
+  <div class="kpi">
+    <div class="label">Open AP exposure</div>
+    <div class="value money">${{ '{:,.0f}'.format(dash.kpis.open_dollars) }}</div>
+    <div class="hint">{{ dash.kpis.open_count }} invoices still unpaid · working capital tied up</div>
+  </div>
+  <div class="kpi warn-tone">
+    <a href="/exceptions?findings=1">
+      <div class="label">Exception drag</div>
+      <div class="value money">${{ '{:,.0f}'.format(dash.kpis.exception_dollars) }}</div>
+      <div class="hint">{{ dash.kpis.exception_rate }}% of open $ stuck on findings — clear these first</div>
+    </a>
+  </div>
+  <div class="kpi danger-tone">
+    <a href="/exceptions?findings=1">
+      <div class="label">Leakage stopped</div>
+      <div class="value money">${{ '{:,.0f}'.format(dash.kpis.blocked_dollars) }}</div>
+      <div class="hint">{{ dash.kpis.blocked_count }} hard-blocked (bad qty / unknown SKU / negative) — would have been bad pay</div>
+    </a>
+  </div>
+  <div class="kpi action">
+    <a href="/exceptions?findings=0&amp;amount_band=under10k">
+      <div class="label">Idle STP cash</div>
+      <div class="value money">${{ '{:,.0f}'.format(dash.kpis.idle_stp_dollars) }}</div>
+      <div class="hint">{{ dash.kpis.idle_stp_count }} clean ≤$10k — analyst can approve &amp; pay now</div>
+    </a>
+  </div>
+  <div class="kpi ok-tone">
+    <div class="label">STP eligibility</div>
+    <div class="value pct">{{ dash.kpis.stp_rate }}%</div>
+    <div class="hint">Share of volume needing no exception &amp; no VP policy hold · realized {{ dash.kpis.realized_stp }}% of closed</div>
+  </div>
+  <div class="kpi">
+    {% if role == 'vp' %}
+    <a href="/approvals">
+      <div class="label">Policy hold ($)</div>
+      <div class="value money">${{ '{:,.0f}'.format(dash.kpis.policy_hold_dollars) }}</div>
+      <div class="hint">{{ dash.kpis.policy_hold_count }} over $10k / escalated — your decision backlog</div>
+    </a>
+    {% else %}
+    <div>
+      <div class="label">Exception age (median)</div>
+      <div class="value">{{ dash.kpis.median_exception_age_h }}h</div>
+      <div class="hint">Oldest open exception {{ dash.kpis.oldest_exception_age_h }}h · SLA signal for AP ops</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="dash-grid">
+  <div class="sheet">
+    <div class="sheet-h">
+      <h2>Pipeline funnel</h2>
+      <span class="meta">Click a stage to open the queue</span>
+    </div>
+    <div class="sheet-b">
+      <div class="chart-wrap"><canvas id="chart-funnel"></canvas></div>
+    </div>
+  </div>
+  <div class="sheet">
+    <div class="sheet-h">
+      <h2>Open exposure by vendor</h2>
+      <span class="meta">Top 8 · $ not yet paid</span>
+    </div>
+    <div class="sheet-b">
+      <div class="chart-wrap"><canvas id="chart-vendors"></canvas></div>
+    </div>
+  </div>
+  <div class="sheet">
+    <div class="sheet-h">
+      <h2>Issue mix</h2>
+      <span class="meta">Open invoices only</span>
+    </div>
+    <div class="sheet-b">
+      <div class="chart-wrap"><canvas id="chart-issues"></canvas></div>
+    </div>
+  </div>
+  <div class="sheet">
+    <div class="sheet-h">
+      <h2>Confidence × amount</h2>
+      <span class="meta">Color = risk · click a point</span>
+    </div>
+    <div class="sheet-b">
+      <div class="chart-wrap"><canvas id="chart-scatter"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-h">
+    <h2>Risk watchlist</h2>
+    <a class="btn btn-ghost" href="/exceptions">Full exceptions →</a>
+  </div>
+  <div class="panel-b flush">
+    {% if dash.watchlist %}
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Invoice</th>
+            <th>Vendor</th>
+            <th>Amount</th>
+            <th>Stage</th>
+            <th>Findings</th>
+            <th>Conf</th>
+            <th>Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in dash.watchlist %}
+          {% set r = w.record %}
+          <tr onclick="location.href='/invoices/{{ r.id }}'">
+            <td><span class="risk-mark {{ w.risk }}" title="{{ w.risk }} risk"></span></td>
+            <td class="mono"><a class="rowlink" href="/invoices/{{ r.id }}">{{ r.invoice_id }}</a></td>
+            <td>{{ r.vendor }}</td>
+            <td class="num">${{ '%.2f'|format(w.amount_f) }}</td>
+            <td><span class="stage-pill s{{ w.stage }}">{{ w.stage }}</span></td>
+            <td class="findings">{{ w.findings }}</td>
+            <td>
+              <span class="conf-spark {% if w.conf_pct < 80 %}low{% endif %}"><i style="width:{{ w.conf_pct }}%"></i></span>
+              <span class="conf-label">{{ w.conf_pct }}%</span>
+            </td>
+            <td class="num">{{ '%.1f'|format(r.age_hours) }}h</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">No open invoices. Capture the sample corpus to populate the dashboard.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script type="application/json" id="dash-data">{{ chart_json_str | safe }}</script>
+{% endblock %}

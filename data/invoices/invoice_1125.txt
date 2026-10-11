@@ -1,0 +1,15 @@
+INVOICE
+
+Vendor: TechParts International
+Invoice Number: INV-1125
+Date: 2026-02-01
+Due Date: 2026-03-15
+
+Items:
+  FakeItem    qty: 8    unit price: $100
+
+Subtotal: $800
+Tax: $0
+Total Amount: $800
+
+Payment Terms: Net 30

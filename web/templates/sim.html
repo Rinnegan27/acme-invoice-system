@@ -1,0 +1,119 @@
+{% extends "sim_base.html" %}
+{% block title %}Case Lab · Simulation{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="/static/sim_lab.js" defer></script>
+{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>Case simulation</h1>
+    <p>
+      Isolated W1–W10 harness (same as <code>python main.py --sim=case</code>).
+      Does not touch the live workbench used by Capture / Exceptions / Approvals.
+    </p>
+  </div>
+  <div class="actions">
+    <form method="post" action="/sim/run">
+      <button class="btn-accent" type="submit">Run case simulation</button>
+    </form>
+  </div>
+</div>
+
+{% if report %}
+<div class="kpis">
+  <div class="kpi {% if report.ok %}ok-tone{% else %}danger-tone{% endif %}">
+    <div class="label">Pass rate</div>
+    <div class="value pct">{{ report.passed }}/{{ report.total }}</div>
+    <div class="hint">{% if report.ok %}All workflows green{% else %}{{ report.total - report.passed }} failed{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">Engine</div>
+    <div class="value" style="font-size:1.1rem">{{ 'Grok' if report.use_grok else 'Stub' }}</div>
+    <div class="hint">Stub is the golden eval path</div>
+  </div>
+  <div class="kpi danger-tone">
+    <div class="label">Failures</div>
+    <div class="value">{{ report.total - report.passed }}</div>
+    <div class="hint">See stage chart for where they break</div>
+  </div>
+</div>
+
+<div class="dash-grid">
+  <div class="sheet">
+    <div class="sheet-h">
+      <h2>Failures by pipeline stage</h2>
+      <span class="meta">Where assertions break (0 = all green)</span>
+    </div>
+    <div class="sheet-b">
+      <div class="chart-wrap"><canvas id="chart-fail-stages"></canvas></div>
+    </div>
+  </div>
+  <div class="sheet">
+    <div class="sheet-h">
+      <h2>Terminal stage (all cases)</h2>
+      <span class="meta">Where each workflow stopped</span>
+    </div>
+    <div class="sheet-b">
+      <div class="chart-wrap"><canvas id="chart-terminal-stages"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-h"><h2>Results crosstab</h2></div>
+  <div class="panel-b flush">
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Workflow</th>
+            <th>Title</th>
+            <th>Stage</th>
+            <th>Files</th>
+            <th>Expected</th>
+            <th>Actual</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.results %}
+          <tr>
+            <td>
+              {% if r.passed %}
+              <span class="badge ok">PASS</span>
+              {% else %}
+              <span class="badge blk">FAIL</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ r.workflow_id }}</td>
+            <td>{{ r.title }}</td>
+            <td>
+              <span class="stage-pill s{{ r.stage }}">{{ r.stage }}</span>
+              <span class="conf-label">{{ r.stage_label }}</span>
+            </td>
+            <td class="findings">{{ r.files|join(', ') }}</td>
+            <td class="findings">{{ r.expected }}</td>
+            <td class="mono">{{ r.actual }}</td>
+            <td class="findings">{{ r.message or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="sim-chart-data">{{ chart_json_str | safe }}</script>
+{% else %}
+<div class="panel">
+  <div class="panel-b">
+    <div class="empty">
+      No report yet. Run the case pack to exercise ingest → validate → approve → pay
+      and see which stage fails when something breaks.
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

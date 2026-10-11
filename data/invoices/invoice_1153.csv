@@ -1,0 +1,12 @@
+field,value
+invoice_number,INV-1153
+vendor,Acme Industrial Supplies
+date,2026-02-01
+due_date,2026-03-15
+item,@@@
+quantity,1
+unit_price,100
+subtotal,100
+tax,0
+total,100
+payment_terms,Net 30

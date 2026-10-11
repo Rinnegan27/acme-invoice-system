@@ -1,0 +1,19 @@
+From: ap-noreply@example.com
+To: ap@acme.example
+Subject: Invoice INV-1171
+
+Hi team,
+
+Please process the following invoice.
+
+Vendor: Acme Industrial Supplies
+Invoice Number: INV-1171
+
+Items:
+  WidgetA    qty: 2    unit price: $250
+
+Total Amount: $500
+Due Date: 2026-03-15
+
+Thanks,
+Accounts Receivable
