@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -49,6 +50,7 @@ def test_grok_extract_uses_fixture_json() -> None:
 
     assert result.invoice.invoice_id == "INV-FIXTURE"
     assert result.invoice.vendor == "Widgets Inc."
+    assert result.invoice.due_date == date(2026, 2, 1)
     assert len(result.invoice.items) == 2
     assert metrics.snapshot()["llm_tokens_total"] == 42
     create_kwargs = client.chat.completions.create.call_args.kwargs

@@ -77,6 +77,19 @@ def test_missing_permit_secret_raises() -> None:
         resolve_permit_secret("")
 
 
+def test_pay_failure_leaves_permit_reusable(tmp_path: Path) -> None:
+    """Verify-without-consume keeps the nonce free for a retry after pay fails."""
+    engine = PolicyEngine(secret=b"test-secret-ok-16", db_path=tmp_path / "retry.db")
+    inv = _inv()
+    permit = engine.issue_permit(inv, actor="system", open_issues=())
+    engine.verify_permit(permit, inv, open_issues=(), consume=False)
+    # Simulated pay failure — nonce must still be free.
+    engine.verify_permit(permit, inv, open_issues=(), consume=False)
+    engine.verify_permit(permit, inv, open_issues=(), consume=True)
+    with pytest.raises(PolicyError, match="already consumed"):
+        engine.verify_permit(permit, inv, open_issues=(), consume=True)
+
+
 def test_blank_env_permit_secret_auto_creates(monkeypatch) -> None:
     """Empty GALATIQ_PERMIT_SECRET is allowed — a local secret is created."""
     from invoice_automation.policy import engine as eng

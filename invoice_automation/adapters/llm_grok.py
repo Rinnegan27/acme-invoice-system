@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -329,7 +330,7 @@ class GrokLLM:
                     invoice_id=model.invoice_id,
                     vendor=model.vendor,
                     amount=model.amount,
-                    due_date=None,
+                    due_date=_parse_grok_due_date(model.due_date),
                     items=tuple(
                         LineItem(
                             sku=i.sku,
@@ -404,6 +405,23 @@ class GrokLLM:
             reason=decision.reason,
             reflected=decision.reflected,
         )
+
+
+def _parse_grok_due_date(value: str | None) -> date | None:
+    """Parse Grok due_date strings. Invalid values become None (not a hard fail)."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"null", "none", "n/a"}:
+        return None
+    text = text[:10]
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        try:
+            return datetime.strptime(text, "%Y/%m/%d").date()
+        except ValueError:
+            return None
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:

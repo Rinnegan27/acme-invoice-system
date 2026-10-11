@@ -425,11 +425,14 @@ class PaymentWorker:
             permit_data = msg["payload"].get("permit")
             if not permit_data:
                 raise PolicyError("Payment node refused: missing PaymentPermit")
-            get_policy_engine().verify_permit(
+            engine = get_policy_engine()
+            # Verify first without consume. If pay fails, the queue can retry
+            # with the same permit. Consume only after a successful pay.
+            engine.verify_permit(
                 permit_data,
                 invoice,
                 open_issues=invoice.issues,
-                consume=True,
+                consume=False,
             )
             # Stem keeps revised duplicates (same business id, different file) distinct.
             payment_id = Path(invoice.source_path).stem or invoice.invoice_id
@@ -439,6 +442,12 @@ class PaymentWorker:
                 amount=invoice.amount,
                 correlation_id=correlation_id,
                 idempotency_key=f"pay:{payment_id}",
+            )
+            engine.verify_permit(
+                permit_data,
+                invoice,
+                open_issues=invoice.issues,
+                consume=True,
             )
             invoice = invoice.with_updates(status=InvoiceStatus.PAID)
             self.events.emit(
