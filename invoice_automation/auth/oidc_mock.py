@@ -27,7 +27,21 @@ _DEMO_USERS: dict[str, dict[str, str]] = {
 
 @dataclass(frozen=True)
 class MockToken:
-    """Opaque mock access token claims."""
+    """Opaque mock access token claims.
+
+    Parameters
+    ----------
+    access_token : str
+        Signed mock token string.
+    role : str
+        Workbench role (``analyst`` or ``vp``).
+    sub : str
+        Subject bound into the session cookie.
+    name : str
+        Display name for the login UI.
+    exp : int
+        Unix expiry time.
+    """
 
     access_token: str
     role: str
@@ -37,7 +51,20 @@ class MockToken:
 
 
 class MockOidcIdp:
-    """Minimal passwordless mock IdP for local demos."""
+    """Passwordless mock IdP for local demos.
+
+    Parameters
+    ----------
+    secret : bytes or str or None
+        HMAC secret for mock tokens. Defaults to the session secret.
+    ttl_s : int
+        Token lifetime in seconds.
+
+    Notes
+    -----
+    Demo users only. Replace this class with a real OIDC client for a live
+    Okta or Auth0 tenant.
+    """
 
     issuer = "https://mock-idp.galatiq.local"
 
@@ -46,7 +73,7 @@ class MockOidcIdp:
         self._ttl_s = ttl_s
 
     def list_users(self) -> list[dict[str, str]]:
-        """Return demo usernames for the login form."""
+        # Demo usernames for the login form.
         seen: set[str] = set()
         out: list[dict[str, str]] = []
         for key, meta in _DEMO_USERS.items():
@@ -59,12 +86,23 @@ class MockOidcIdp:
         return out
 
     def authenticate(self, username: str) -> MockToken | None:
-        """Issue a mock access token for a known demo user."""
+        """Issue a mock access token for a known demo user.
+
+        Parameters
+        ----------
+        username : str
+            Demo username or email.
+
+        Returns
+        -------
+        MockToken or None
+            Token when the user is known. None otherwise.
+        """
         meta = _DEMO_USERS.get((username or "").strip().lower()) or _DEMO_USERS.get(
             (username or "").strip()
         )
         if meta is None:
-            # Case-insensitive email lookup
+            # Case-insensitive email lookup.
             for key, value in _DEMO_USERS.items():
                 if key.lower() == (username or "").strip().lower():
                     meta = value
@@ -91,7 +129,18 @@ class MockOidcIdp:
         )
 
     def introspect(self, access_token: str) -> MockToken | None:
-        """Validate a mock access token."""
+        """Validate a mock access token.
+
+        Parameters
+        ----------
+        access_token : str
+            Token from :meth:`authenticate`.
+
+        Returns
+        -------
+        MockToken or None
+            Claims when the MAC and expiry are valid. None otherwise.
+        """
         if not access_token.startswith("mock."):
             return None
         parts = access_token.split(".")

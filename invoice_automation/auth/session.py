@@ -28,7 +28,21 @@ COOKIE_NAME = "galatiq_session"
 
 @dataclass(frozen=True)
 class SessionClaims:
-    """Verified workbench session claims."""
+    """Verified workbench session claims.
+
+    Parameters
+    ----------
+    role : str
+        ``analyst`` or ``vp``.
+    llm : str
+        ``stub`` or ``grok``.
+    sub : str
+        Subject from mock OIDC (or role when missing).
+    exp : int
+        Unix expiry time.
+    nonce : str
+        Session nonce.
+    """
 
     role: str
     llm: str
@@ -38,7 +52,7 @@ class SessionClaims:
 
     @property
     def actor(self) -> str:
-        """Actor string bound into PaymentPermit issue paths."""
+        # Actor string for PaymentPermit issue paths.
         return self.sub if self.sub else self.role
 
 
@@ -50,6 +64,16 @@ def resolve_session_secret(secret: bytes | str | None = None) -> bytes:
     secret : bytes or str or None
         Explicit secret. When None, prefer ``GALATIQ_SESSION_SECRET``,
         else fall back to the permit secret resolver.
+
+    Returns
+    -------
+    bytes
+        HMAC key material.
+
+    Raises
+    ------
+    PolicyError
+        When ``GALATIQ_SESSION_SECRET`` is set but shorter than 16 chars.
     """
     if secret is not None:
         if isinstance(secret, bytes):
@@ -111,7 +135,22 @@ def verify_session_cookie(
     secret: bytes | str | None = None,
     now: float | None = None,
 ) -> SessionClaims | None:
-    """Verify a session cookie. Return None when missing or invalid."""
+    """Verify a session cookie.
+
+    Parameters
+    ----------
+    value : str or None
+        Cookie value ``body.mac``.
+    secret : bytes or str or None
+        HMAC secret override.
+    now : float or None
+        Clock override for expiry checks.
+
+    Returns
+    -------
+    SessionClaims or None
+        Claims when valid. None when missing, bad MAC, or expired.
+    """
     if not value or "." not in value:
         return None
     body, _, mac = value.partition(".")

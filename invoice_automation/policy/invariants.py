@@ -38,6 +38,12 @@ def collect_invariant_issues(invoice: Invoice) -> list[str]:
     -------
     list of str
         Issue codes. Empty when the invoice passes integrity checks.
+
+    Notes
+    -----
+    When all lines have prices, a total above the line sum is allowed for
+    tax or fees. A total below the line sum by more than $0.05 raises
+    ``amount_line_mismatch``.
     """
     issues: list[str] = []
     if invoice.amount < 0:

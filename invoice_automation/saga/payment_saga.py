@@ -18,6 +18,17 @@ from invoice_automation.ports.contracts import InventoryRepository, PaymentGatew
 class PaymentSaga:
     """Run payment_intent, outbox, and gateway.
 
+    Parameters
+    ----------
+    db_path : str or Path
+        SQLite path for payment_intent and outbox tables.
+    schema_path : str or Path
+        SQL schema applied on first open.
+    gateway : PaymentGateway
+        Idempotent payment adapter.
+    inventory : InventoryRepository or None
+        Optional stock store. When set, stock decrements after pay.
+
     Notes
     -----
     The gateway call is outside the DB transaction.
@@ -52,6 +63,34 @@ class PaymentSaga:
         idempotency_key: str | None = None,
         items: Sequence[LineItem] = (),
     ) -> PaymentResult:
+        """Pay one invoice through the gateway and optional stock draw.
+
+        Parameters
+        ----------
+        invoice_id : str
+            Payment aggregate id (often the source file stem).
+        vendor : str
+            Payee name.
+        amount : Decimal
+            Amount to pay.
+        correlation_id : str
+            Trace id for outbox and alerts.
+        idempotency_key : str or None
+            Gateway key. Defaults to ``pay:{invoice_id}``.
+        items : sequence of LineItem
+            Lines for stock decrement. Empty skips stock.
+
+        Returns
+        -------
+        PaymentResult
+            Gateway result. Replay of RECONCILE returns ``status="reconcile"``.
+
+        Raises
+        ------
+        PaymentError
+            Gateway failure, or stock failure after a successful gateway pay
+            (message prefix ``stock_reconcile_required:``).
+        """
         key = idempotency_key or f"pay:{invoice_id}"
         with connect(self.db_path) as conn:
             existing = conn.execute(
@@ -211,11 +250,13 @@ class PaymentSaga:
             conn.commit()
 
     def outbox_events(self) -> list[dict[str, Any]]:
+        # All outbox rows in id order (published and unpublished).
         with connect(self.db_path) as conn:
             rows = conn.execute("SELECT * FROM outbox ORDER BY id ASC").fetchall()
             return [dict(r) for r in rows]
 
     def mark_outbox_published(self, outbox_id: int) -> None:
+        # Mark one outbox row published after JSONL emit.
         with connect(self.db_path) as conn:
             conn.execute(
                 "UPDATE outbox SET published = 1 WHERE id = ?",

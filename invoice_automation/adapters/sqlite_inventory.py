@@ -65,7 +65,30 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
 
 
 class SqliteInventoryRepository:
-    """Check stock, unit prices, and PO coverage in a local SQLite file."""
+    """Check stock, unit prices, and PO coverage in a local SQLite file.
+
+    Parameters
+    ----------
+    db_path : str or Path
+        SQLite inventory database path.
+    reseeds : bool
+        When True, restore seed stock and master data on open.
+    price_tolerance : Decimal
+        Max relative delta for strict catalog checks (default 0.05).
+    require_po : bool
+        When True, require a PO line that covers each SKU quantity.
+    require_price_check : bool
+        When True, compare unit price to the exact catalog within
+        ``price_tolerance``. Off by default.
+    soft_price_bands : bool
+        When True and strict check is off, flag prices outside seed bands.
+        On by default.
+
+    Notes
+    -----
+    Soft band hits raise ``price_mismatch`` as a soft policy finding.
+    Strict catalog and PO checks stay opt-in so the case corpus can pay.
+    """
 
     def __init__(
         self,
@@ -87,6 +110,7 @@ class SqliteInventoryRepository:
         self._init_db(reseeds=reseeds)
 
     def _init_db(self, *, reseeds: bool) -> None:
+        # Create tables. Optionally reseed stock, prices, bands, and POs.
         with connect(self.db_path) as conn:
             conn.execute(INVENTORY_SCHEMA_SQL)
             conn.execute(UNIT_PRICE_SCHEMA_SQL)
@@ -97,7 +121,7 @@ class SqliteInventoryRepository:
             conn.commit()
 
     def reseed(self) -> None:
-        """Restore case-brief stock, prices, and PO seed data."""
+        # Restore case-brief stock, prices, bands, and PO seed data.
         with connect(self.db_path) as conn:
             self._reseed_conn(conn)
             conn.commit()
@@ -119,18 +143,23 @@ class SqliteInventoryRepository:
         )
 
     def stock_levels(self) -> dict[str, int]:
-        """Return current stock map for tests."""
+        # Current SKU → stock map (tests and demos).
         with connect(self.db_path) as conn:
             rows = conn.execute("SELECT item, stock FROM inventory").fetchall()
             return {str(r["item"]): int(r["stock"]) for r in rows}
 
     def check_availability(self, items: Sequence[LineItem]) -> list[str]:
-        """Return issue codes for inventory / integrity problems.
+        """Return issue codes for inventory and master-data problems.
+
+        Parameters
+        ----------
+        items : sequence of LineItem
+            Lines to check. Quantities are summed by SKU.
 
         Returns
         -------
         list of str
-            Empty when all items are available and quantities are valid.
+            Issue codes. Empty when stock and optional price/PO checks pass.
 
         Notes
         -----
@@ -197,6 +226,11 @@ class SqliteInventoryRepository:
 
     def decrement_stock(self, items: Sequence[LineItem]) -> None:
         """Decrement stock atomically after a successful payment.
+
+        Parameters
+        ----------
+        items : sequence of LineItem
+            Lines to draw. Quantities are summed by SKU.
 
         Raises
         ------

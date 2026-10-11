@@ -10,14 +10,28 @@ from invoice_automation.saga.payment_saga import PaymentSaga
 
 
 class OutboxPublisher:
-    """Publish unpublished saga outbox events to the structured event sink."""
+    """Publish unpublished saga outbox rows to the JSONL event sink.
+
+    Parameters
+    ----------
+    saga : PaymentSaga
+        Source of outbox rows.
+    events : EventSink
+        Append-only event log.
+    """
 
     def __init__(self, saga: PaymentSaga, events: EventSink) -> None:
         self.saga = saga
         self.events = events
 
     def flush(self) -> int:
-        """Publish all unpublished outbox rows. Returns count published."""
+        """Publish unpublished outbox rows.
+
+        Returns
+        -------
+        int
+            Count of rows published in this call.
+        """
         published = 0
         for row in self.saga.outbox_events():
             if int(row.get("published") or 0) == 1:

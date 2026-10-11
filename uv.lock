@@ -874,7 +874,7 @@ wheels = [
 
 [[package]]
 name = "galatiq-invoice-system"
-version = "1.2.0"
+version = "1.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

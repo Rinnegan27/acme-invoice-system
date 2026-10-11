@@ -483,7 +483,7 @@ def _read_source(path: Path) -> str:
 
 
 def _business_invoice_id(events: list[dict[str, Any]], *, fallback: str) -> str:
-    """Return a business INV- id from events when present."""
+    # Prefer INV- business ids from events. Fall back to the file stem.
     preferred = ""
     for event in events:
         payload = event.get("payload") or {}

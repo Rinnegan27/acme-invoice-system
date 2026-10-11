@@ -21,7 +21,19 @@ from typing import Any
 
 
 class SpanExporter:
-    """Write span records to JSONL and OTLP/JSON files."""
+    """Write stage spans to JSONL and a local OTLP/JSON batch file.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to ``spans.jsonl``. The OTLP batch file is written beside it as
+        ``otlp_traces.json``.
+
+    Notes
+    -----
+    Loads prior OTLP spans from ``otlp_traces.json`` when that file exists.
+    Set ``GALATIQ_SPAN_CONSOLE=1`` to print each span.
+    """
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
@@ -41,6 +53,13 @@ class SpanExporter:
                 self._otlp_spans = []
 
     def emit(self, span: dict[str, Any]) -> None:
+        """Append one span to JSONL and refresh the OTLP batch file.
+
+        Parameters
+        ----------
+        span : dict
+            Span record with name, times, status, and attributes.
+        """
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(span, separators=(",", ":")) + "\n")
         self._append_otlp(span)
@@ -52,6 +71,7 @@ class SpanExporter:
             )
 
     def _append_otlp(self, span: dict[str, Any]) -> None:
+        # Map one internal span into the OTLP/JSON resourceSpans shape.
         attrs = [
             {"key": str(k), "value": {"stringValue": str(v)}}
             for k, v in (span.get("attributes") or {}).items()
@@ -101,7 +121,24 @@ def stage_span(
     correlation_id: str = "",
     attributes: dict[str, Any] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Record one stage span. Yield a mutable attrs dict."""
+    """Record one stage span around a ``with`` block.
+
+    Parameters
+    ----------
+    exporter : SpanExporter or None
+        Sink for the finished span. None skips export.
+    name : str
+        Span name (for example ``stage.payment``).
+    correlation_id : str
+        Optional correlation id stored on attributes.
+    attributes : dict or None
+        Initial attribute map. The yielded dict is mutable.
+
+    Yields
+    ------
+    dict
+        Mutable attribute map for the active span.
+    """
     start = time.time()
     attrs: dict[str, Any] = dict(attributes or {})
     if correlation_id:
