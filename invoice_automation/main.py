@@ -1,9 +1,12 @@
-"""CLI entrypoint for the Galatiq invoice pipeline.
+"""CLI entry point for the Galatiq invoice pipeline.
 
 Notes
 -----
-Default engine is Grok. Summary JSON is the default CLI output.
-Use ``--llm=stub`` for offline runs. Use ``-v`` for the full audit dump.
+The default engine is Grok. The default CLI output is a short JSON summary.
+Use ``--llm=stub`` for offline runs. Use ``-v`` for the full audit.
+The case CLI contract is::
+
+    python main.py --invoice_path=data/invoices/invoice1.txt
 """
 
 from __future__ import annotations

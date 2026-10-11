@@ -2,8 +2,8 @@
 
 Source: https://github.com/galatiq-ai/galatiq-case-invoices
 
-These helpers preserve the exact APIs / seed data shown in the case README
-so the submission matches the brief line-for-line where it specifies code.
+These helpers keep the APIs and seed data from the case README.
+The submission matches the brief where the brief shows code.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Mock Inventory Database (Required Setup) — case README, verbatim seed
+# Mock inventory database (required setup) — case README seed
 # ---------------------------------------------------------------------------
 INVENTORY_SEED: tuple[tuple[str, int], ...] = (
     ("WidgetA", 15),
@@ -34,9 +34,9 @@ INVENTORY_INSERT_SQL = """
 
 
 def setup_inventory_db(db_path: str | Path = "inventory.db") -> Path:
-    """Create the case-brief inventory.db with the required starter seed.
+    """Create the case-brief inventory database with the starter seed.
 
-    Equivalent to the case README snippet::
+    This matches the case README snippet::
 
         import sqlite3
         conn = sqlite3.connect('inventory.db')
@@ -45,6 +45,16 @@ def setup_inventory_db(db_path: str | Path = "inventory.db") -> Path:
         cursor.execute(\"\"\"INSERT INTO inventory VALUES
             ('WidgetA', 15), ('WidgetB', 10), ('GadgetX', 5), ('FakeItem', 0)\"\"\")
         conn.commit()
+
+    Parameters
+    ----------
+    db_path : str or Path
+        Path to the SQLite file.
+
+    Returns
+    -------
+    Path
+        Path to the inventory file.
     """
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,10 +69,10 @@ def setup_inventory_db(db_path: str | Path = "inventory.db") -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Mock Payment API — case README, verbatim
+# Mock payment API — case README, verbatim
 # ---------------------------------------------------------------------------
 def mock_payment(vendor: Any, amount: Any) -> dict[str, str]:
-    """Case-brief mock payment API.
+    """Run the case-brief mock payment API.
 
     Parameters
     ----------
@@ -74,15 +84,15 @@ def mock_payment(vendor: Any, amount: Any) -> dict[str, str]:
     Returns
     -------
     dict
-        ``{"status": "success"}`` after printing the case log line.
+        ``{"status": "success"}`` after the case log line prints.
     """
     print(f"Paid {amount} to {vendor}")
     return {"status": "success"}
 
 
 # ---------------------------------------------------------------------------
-# Grok API Setup — case README placeholder (your_key)
-# Live client lives in adapters/llm_grok.py (OpenAI-compatible xAI API).
+# Grok API setup — case README placeholder (your_key)
+# Live client: adapters/llm_grok.py (OpenAI-compatible xAI API).
 # ---------------------------------------------------------------------------
 GROK_API_KEY_PLACEHOLDER = "your_key"
 GROK_MODEL = "grok-3"
@@ -96,8 +106,8 @@ GROK_CASE_SNIPPET = (
     ")"
 )
 
-# Case CLI contract. Upstream data/ ships invoice_1001.txt (not invoice1.txt);
-# this repo provides data/invoices/invoice1.txt as the brief entrypoint alias.
+# Case CLI contract. Upstream data ships invoice_1001.txt (not invoice1.txt).
+# This repo provides data/invoices/invoice1.txt as the brief entry alias.
 CASE_CLI = "python main.py --invoice_path=data/invoices/invoice1.txt"
 
 _PLACEHOLDER_KEYS = frozenset(
@@ -113,7 +123,18 @@ _PLACEHOLDER_KEYS = frozenset(
 
 
 def is_live_xai_key(api_key: str | None) -> bool:
-    """Return True only when a non-placeholder xAI key is configured."""
+    """Return True only when a real xAI key is set.
+
+    Parameters
+    ----------
+    api_key : str or None
+        Value from the environment or prompt.
+
+    Returns
+    -------
+    bool
+        False for blank or placeholder keys.
+    """
     if api_key is None:
         return False
     key = api_key.strip()

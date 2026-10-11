@@ -1,10 +1,14 @@
 # Galatiq Invoice Processing System
 
-Version **1.1.1**. Multi-agent AP automation for the [Galatiq case](https://github.com/galatiq-ai/galatiq-case-invoices).
+Version **1.1.1**.
+
+This system automates invoice work for the [Galatiq case](https://github.com/galatiq-ai/galatiq-case-invoices).
+
+The public GitHub repository is [Rinnegan27/galatiq-invoice-system](https://github.com/Rinnegan27/galatiq-invoice-system).
 
 ## How to run
 
-Do these steps first.
+Do these steps in order.
 
 ### 1. Install
 
@@ -21,38 +25,86 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### 2. Environment
+### 2. Set the environment
 
-Do not commit `.env`. It is gitignored.
+Do not commit `.env`. Git ignores this file.
 
 ```bash
 cp .env.example .env
 ```
 
 - Leave `XAI_API_KEY` blank for offline work.
-- Leave `GALATIQ_PERMIT_SECRET` blank or remove the line.
-- On first run, the system creates a random HMAC secret and writes it to `.env`.
+- Leave `GALATIQ_PERMIT_SECRET` blank, or remove the line.
+- On the first run, the system creates a random HMAC secret and writes it to `.env`.
 - For live Grok only, set `XAI_API_KEY=xai-<your-real-key>`.
 
-### 3. Run one invoice (offline)
+### 3. Case CLI contract (required path)
+
+The case brief requires this command:
+
+```bash
+python main.py --invoice_path=data/invoices/invoice1.txt
+```
+
+With `uv` and the offline stub:
 
 ```bash
 uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
 ```
 
-You get a short JSON summary. Add `-v` for the full audit dump.
+You get a short JSON summary. Add `-v` for the full audit.
 
-### 4. Other common commands
+`data/invoices/invoice1.txt` is an alias of INV-1001.
+
+## Evaluator demo (three steps)
+
+Use these steps for a fast review.
+
+### A. Offline happy path
 
 ```bash
-# Default engine is Grok (prompts for key or offline if missing)
-uv run python main.py --invoice_path=data/invoices/invoice1.txt
+uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
+```
 
+Expect status `paid` for INV-1001.
+
+### B. Case Simulation Contract
+
+```bash
+uv run python main.py --sim=case --llm=stub
+```
+
+Expect all W1–W10 workflows to pass.
+
+### C. Optional live Grok
+
+1. Set a real key in `.env`: `XAI_API_KEY=xai-...`
+2. Run:
+
+```bash
+uv run python main.py --invoice_path=data/invoices/invoice1.txt
+```
+
+The default engine is Grok. If the key is missing or bad, the CLI asks for a key or offline stub.
+
+### Scenario proof artifact
+
+The case README scenario table is checked in under `docs/`:
+
+- [docs/scenario_proof.md](docs/scenario_proof.md) — human table
+- [docs/scenario_proof.json](docs/scenario_proof.json) — machine report
+
+Regenerate:
+
+```bash
+make scenario-proof
+```
+
+## Other common commands
+
+```bash
 # All sample invoices (offline)
 uv run python main.py --all --llm=stub
-
-# Case Simulation Contract W1–W10
-uv run python main.py --sim=case --llm=stub
 
 # AP Control Centre UI
 uv run uvicorn web.app:app --reload --port 8000
@@ -60,7 +112,7 @@ uv run uvicorn web.app:app --reload --port 8000
 # Case Lab: http://localhost:8000/sim
 ```
 
-### 5. Aether Helix quality gates
+## Aether Helix quality gates
 
 ```bash
 make sync
@@ -70,30 +122,57 @@ make quality
 make report
 ```
 
----
+| Gate | Command | Coverage |
+|---|---|---|
+| Smoke | `make smoke` | Fast CLI + case-sim stub |
+| Black box | `make blackbox` | Case sim, corpus, e2e |
+| White box | `make whitebox` | Parsers, policy, hardening |
+| Lint | `make lint` | Ruff check + format |
+| Full | `make quality` | Lint + all offline tests |
+
+**Aether Helix** is the in-repo quality persona. It is a project nickname for gates. It is not a product role.
+
+## Grok API note
+
+The case README shows a sketch with `from xai import Grok`.
+
+This project uses the OpenAI-compatible xAI HTTP API instead:
+
+- Base URL: `https://api.x.ai/v1`
+- Client: `openai.OpenAI`
+- Default model: `grok-3` (see `XAI_MODEL`)
+
+Code: `invoice_automation/adapters/llm_grok.py`.
+
+Offline work uses `--llm=stub`. No live key is required for CI.
+
+## Intentional non-goals
+
+We do not plan these changes:
+
+- Port to LangGraph, CrewAI, or AutoGen. The case allows a custom solution. This repo uses a custom SQLite queue pipeline.
+- Expand the deprecated Streamlit `ui/`. Product UI is FastAPI `web/` only.
 
 ## How this solution meets the requirements
 
-This build covers the full Galatiq case surface — not a demo stub.
+This build covers the full Galatiq case surface.
 
 | Requirement | How we deliver it |
 |---|---|
 | Four stages: Ingestion → Validation → Approval → Payment | Durable SQLite stage queues + workers in `invoice_automation/agents/` |
 | Inventory seed (WidgetA/B, GadgetX, FakeItem) | `case_brief.INVENTORY_SEED` reseeds on pipeline start |
-| Scenario table (1001, 1002, 1003, 1008, 1009, 1016, …) | Parsers + `--sim=case` (W1–W10) + 100-file corpus |
+| Scenario table (1001, 1002, 1003, 1008, 1009, 1016, …) | `docs/scenario_proof.*` + `--sim=case` (W1–W10) + 100-file corpus |
 | `mock_payment(vendor, amount)` | Case-brief mock → `MockPaymentGateway` + payment saga |
-| Grok / offline LLM | Default CLI = Grok; `--llm=stub` for CI; missing/bad key prompts for key or offline |
+| Grok / offline LLM | Default CLI = Grok; `--llm=stub` for CI |
 | CLI contract path | `python main.py --invoice_path=data/invoices/invoice1.txt` |
 | Structured audit trail | JSONL events, outbox publish, metrics snapshot |
-| Offline / no live payment rails | Stub LLM + mock gateway; no external pay APIs |
+| Offline / no live payment rails | Stub LLM + mock gateway |
 | Multi-format corpus | txt / json / csv / xml / pdf under `data/invoices/` |
 | High-value scrutiny | Stub/Grok reflection over $10k; Control Centre Approvals desk |
 | Human-in-the-loop | Exceptions, escalate, approve/decline in FastAPI `web/` |
 | Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
-| Fail-closed extraction | Missing totals and bad keys do not silently “succeed” |
+| Fail-closed extraction | Missing totals and bad keys do not silently succeed |
 | Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
-
-**Aether Helix** is the in-repo quality persona: smoke, black-box, white-box, lint, and the one-page `make report` summary. It is a project nickname for gates — not a product role.
 
 ## What this system does
 
@@ -125,16 +204,6 @@ Human escalate / reject / Approvals-desk pay is in the Control Centre only.
 
 Role switcher in the UI is **demo auth only** (unsigned cookie).
 
-## Aether Helix quality gates
-
-| Gate | Command | Coverage |
-|---|---|---|
-| Smoke | `make smoke` | Fast CLI + case-sim stub |
-| Black box | `make blackbox` | Case sim, corpus, e2e |
-| White box | `make whitebox` | Parsers, policy, hardening |
-| Lint | `make lint` | Ruff check + format |
-| Full | `make quality` | Lint + all offline tests |
-
 ## Case brief compliance (detail)
 
 Mapped 1:1 to [galatiq-case-invoices](https://github.com/galatiq-ai/galatiq-case-invoices):
@@ -143,9 +212,9 @@ Mapped 1:1 to [galatiq-case-invoices](https://github.com/galatiq-ai/galatiq-case
 |---|---|
 | 4 stages: Ingestion → Validation → Approval → Payment | `StageName` + agents/workers |
 | Inventory seed WidgetA/B, GadgetX, FakeItem | `case_brief.INVENTORY_SEED` |
-| Scenario table (1001/1002/1003/1008/1009/1016) | `--sim=case` + parsers |
+| Scenario table (1001/1002/1003/1008/1009/1016) | `docs/scenario_proof.*` + `--sim=case` |
 | `mock_payment(vendor, amount)` | `case_brief.mock_payment` |
-| Grok `api_key="your_key"` / `grok-3` | `.env.example` + `llm_grok.py` |
+| Grok via xAI API / `grok-3` | `.env.example` + `llm_grok.py` (OpenAI-compatible client) |
 | CLI `python main.py --invoice_path=data/invoices/invoice1.txt` | `main.py` |
 | Structured logs / results | JSONL events + CLI JSON |
 | Offline / no external payment APIs | mock gateway + stub LLM |
@@ -162,7 +231,7 @@ Case Lab: [http://localhost:8000/sim](http://localhost:8000/sim) (not in product
 
 ## Architecture
 
-Custom multi-stage pipeline with SQLite queues, workbench, optional Grok, and a non-LLM PaymentPermit fence. Not LangGraph.
+This project uses a custom multi-stage pipeline. It uses SQLite queues, a workbench, optional Grok, and a non-LLM PaymentPermit fence. It is not LangGraph.
 
 ```text
 Invoice files
@@ -176,9 +245,9 @@ Invoice files
 ### Hardening notes
 
 - Permit nonces live in SQLite `consumed_permits`.
-- Blank `GALATIQ_PERMIT_SECRET` auto-creates a random secret.
-- Permit is verified before pay and consumed only after pay succeeds (retries stay possible).
-- One orchestration path via `Pipeline.drain`.
+- Blank `GALATIQ_PERMIT_SECRET` creates a random secret.
+- The system verifies the permit before pay. It consumes the permit only after pay succeeds. Retries stay possible.
+- One orchestration path runs through `Pipeline.drain`.
 - Grok auth failures fail closed. Due dates from Grok are kept.
 - CI uses `uv sync --frozen` plus ruff and offline pytest.
 
@@ -189,9 +258,10 @@ main.py                     # Case CLI
 invoice_automation/         # Domain, agents, saga, workbench, sim
 web/                        # FastAPI Control Centre
 data/invoices/              # 100-file corpus
+docs/                       # Scenario proof + evaluator artifacts
 tests/                      # smoke / black_box / white_box
 uv.lock                     # Locked deps
-Makefile                    # sync, lint, quality
+Makefile                    # sync, lint, quality, scenario-proof
 CLAUDE.md                   # Coding rules
 ```
 
@@ -199,7 +269,7 @@ CLAUDE.md                   # Coding rules
 
 | Criterion | Evidence |
 |---|---|
-| Functionality | Case sim; CLI + workbench; full requirement map above |
+| Functionality | Case sim; CLI + workbench; `docs/scenario_proof.*` |
 | Code quality | Protocols, ruff, Aether Helix gates |
 | Agentic sophistication | Multi-stage agents, optional Grok, self-correction |
 | Shipping mindset | Offline-first; Control Centre UI |

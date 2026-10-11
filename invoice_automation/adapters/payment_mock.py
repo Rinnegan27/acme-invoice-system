@@ -1,4 +1,4 @@
-"""Idempotent mock payment gateway wrapping the case-brief mock_payment API."""
+"""Idempotent mock payment gateway around the case-brief mock_payment API."""
 
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ from invoice_automation.domain.models import PaymentResult
 
 
 class MockPaymentGateway:
-    """In-memory idempotent payment gateway for local prototype.
+    """In-memory payment gateway for the local prototype.
 
-    Calls the case-brief ``mock_payment(vendor, amount)`` on first pay.
+    On the first pay for a key, this class calls
+    ``mock_payment(vendor, amount)`` from the case brief.
     """
 
     def __init__(self) -> None:

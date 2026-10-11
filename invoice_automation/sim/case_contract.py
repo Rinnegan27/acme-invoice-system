@@ -1,4 +1,4 @@
-"""Case Simulation Contract (CSC) — Galatiq case workflows W1–W10."""
+"""Case Simulation Contract (CSC). Galatiq case workflows W1–W10."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ Mode = Literal[
 
 @dataclass(frozen=True)
 class CaseSpec:
-    """One executable workflow assertion."""
+    """One workflow check that the sim can run."""
 
     workflow_id: str
     title: str

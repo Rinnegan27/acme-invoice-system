@@ -1,5 +1,5 @@
 # Galatiq invoice system — operator targets (uv primary).
-.PHONY: sync lint fmt test smoke blackbox whitebox quality cli-stub report
+.PHONY: sync lint fmt test smoke blackbox whitebox quality cli-stub report scenario-proof
 
 UV ?= uv
 PYTEST_ENV = GALATIQ_PERMIT_SECRET=ci-test-secret-do-not-use-in-prod
@@ -35,3 +35,6 @@ cli-stub:
 
 report:
 	$(PYTEST_ENV) $(UV) run python scripts/quality_report.py
+
+scenario-proof:
+	$(PYTEST_ENV) $(UV) run python scripts/scenario_proof.py

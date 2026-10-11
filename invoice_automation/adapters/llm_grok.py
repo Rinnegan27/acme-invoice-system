@@ -1,9 +1,12 @@
-"""Live Grok LLM client via the OpenAI-compatible xAI API.
+"""Live Grok LLM client through the OpenAI-compatible xAI API.
 
 Notes
 -----
-Incorrect API keys raise :class:`GrokAuthError`. Extract must not fall back
-to the offline parser after an auth failure.
+Bad API keys raise :class:`GrokAuthError`. After an auth failure, extract
+must not fall back to the offline parser.
+
+The case README shows ``from xai import Grok``. This module uses
+``openai.OpenAI`` with base URL ``https://api.x.ai/v1`` instead.
 """
 
 from __future__ import annotations

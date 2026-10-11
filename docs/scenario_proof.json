@@ -1,0 +1,166 @@
+{
+  "ok": true,
+  "source": "https://github.com/galatiq-ai/galatiq-case-invoices",
+  "engine": "offline stub (--llm=stub)",
+  "passed": 8,
+  "total": 8,
+  "rows": [
+    {
+      "scenario": "Normal order within stock",
+      "invoice_id": "INV-1001",
+      "file_name": "invoice_1001.txt",
+      "expect_status": "paid",
+      "expect_issue_substr": null,
+      "brief_note": "Items found, quantities valid \u2014 passes validation",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1001.txt",
+        "invoice_id": "invoice_1001",
+        "status": "paid",
+        "issues": [],
+        "approval_reason": "Auto-approved under $10k threshold",
+        "paid": true
+      }
+    },
+    {
+      "scenario": "Normal order within stock",
+      "invoice_id": "INV-1004",
+      "file_name": "invoice_1004.json",
+      "expect_status": "paid",
+      "expect_issue_substr": null,
+      "brief_note": "Items found, quantities valid \u2014 passes validation",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1004.json",
+        "invoice_id": "invoice_1004",
+        "status": "paid",
+        "issues": [],
+        "approval_reason": "Auto-approved under $10k threshold",
+        "paid": true
+      }
+    },
+    {
+      "scenario": "Normal order within stock",
+      "invoice_id": "INV-1006",
+      "file_name": "invoice_1006.csv",
+      "expect_status": "paid",
+      "expect_issue_substr": null,
+      "brief_note": "Items found, quantities valid \u2014 passes validation",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1006.csv",
+        "invoice_id": "invoice_1006",
+        "status": "paid",
+        "issues": [],
+        "approval_reason": "Auto-approved under $10k threshold",
+        "paid": true
+      }
+    },
+    {
+      "scenario": "Quantity exceeds stock",
+      "invoice_id": "INV-1002",
+      "file_name": "invoice_1002.txt",
+      "expect_status": "rejected",
+      "expect_issue_substr": "insufficient_stock",
+      "brief_note": "INV-1002 requests 20\u00d7 GadgetX, only 5 in stock",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1002.txt",
+        "invoice_id": "INV-1002",
+        "status": "rejected",
+        "issues": [
+          "insufficient_stock:GadgetX"
+        ],
+        "approval_reason": "",
+        "paid": false
+      }
+    },
+    {
+      "scenario": "Fraudulent / zero-stock item",
+      "invoice_id": "INV-1003",
+      "file_name": "invoice_1003.txt",
+      "expect_status": "rejected",
+      "expect_issue_substr": "zero_stock",
+      "brief_note": "FakeItem has 0 stock",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1003.txt",
+        "invoice_id": "INV-1003",
+        "status": "rejected",
+        "issues": [
+          "zero_stock:FakeItem"
+        ],
+        "approval_reason": "",
+        "paid": false
+      }
+    },
+    {
+      "scenario": "Item not in database",
+      "invoice_id": "INV-1008",
+      "file_name": "invoice_1008.txt",
+      "expect_status": "rejected",
+      "expect_issue_substr": "unknown_item",
+      "brief_note": "SuperGizmo / MegaSprocket not in seed",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1008.txt",
+        "invoice_id": "INV-1008",
+        "status": "rejected",
+        "issues": [
+          "unknown_item:SuperGizmo",
+          "unknown_item:MegaSprocket"
+        ],
+        "approval_reason": "",
+        "paid": false
+      }
+    },
+    {
+      "scenario": "Item not in database",
+      "invoice_id": "INV-1016",
+      "file_name": "invoice_1016.json",
+      "expect_status": "rejected",
+      "expect_issue_substr": "unknown_item",
+      "brief_note": "WidgetC not in seed",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1016.json",
+        "invoice_id": "INV-1016",
+        "status": "rejected",
+        "issues": [
+          "unknown_item:WidgetC"
+        ],
+        "approval_reason": "",
+        "paid": false
+      }
+    },
+    {
+      "scenario": "Invalid data",
+      "invoice_id": "INV-1009",
+      "file_name": "invoice_1009.json",
+      "expect_status": "rejected",
+      "expect_issue_substr": "invalid_quantity",
+      "brief_note": "Negative quantity \u2014 data integrity issue",
+      "passed": true,
+      "message": "",
+      "actual": {
+        "file_name": "invoice_1009.json",
+        "invoice_id": "INV-1009",
+        "status": "rejected",
+        "issues": [
+          "invalid_quantity:WidgetA",
+          "negative_amount",
+          "missing_vendor"
+        ],
+        "approval_reason": "",
+        "paid": false
+      }
+    }
+  ]
+}

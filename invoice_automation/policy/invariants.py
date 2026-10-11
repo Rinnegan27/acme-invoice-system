@@ -1,4 +1,4 @@
-"""Deterministic schema / integrity checks — no LLM involvement."""
+"""Deterministic schema and integrity checks. No LLM work here."""
 
 from __future__ import annotations
 
@@ -20,7 +20,18 @@ _INJECTION_MARKERS = (
 
 
 def collect_invariant_issues(invoice: Invoice) -> list[str]:
-    """Return hard integrity issue codes for an extracted invoice."""
+    """Return hard integrity issue codes for one extracted invoice.
+
+    Parameters
+    ----------
+    invoice : Invoice
+        Invoice after extract.
+
+    Returns
+    -------
+    list of str
+        Issue codes. Empty when the invoice passes integrity checks.
+    """
     issues: list[str] = []
     if invoice.amount < 0:
         issues.append("negative_amount")

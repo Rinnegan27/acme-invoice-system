@@ -2,10 +2,10 @@
 
 Notes
 -----
-Each worker dequeues at most one message per ``process_one`` call.
-``Pipeline.drain`` loops these workers until the queues are idle or the
-step budget ends. Auth failures from Grok must not be swallowed as soft
-ingestion errors — they re-raise as ``GrokAuthError``.
+Each worker takes at most one message per ``process_one`` call.
+``Pipeline.drain`` runs the workers until the queues are idle or the
+step budget ends. Grok auth failures must not become soft ingest errors.
+They raise ``GrokAuthError`` again.
 """
 
 from __future__ import annotations
@@ -237,28 +237,28 @@ class ValidationWorker:
 
 
 class ApprovalWorker:
-    """Run VP/system approval, issue a PaymentPermit, enqueue payment.
+    """Run VP or system approval. Issue a PaymentPermit. Enqueue payment.
 
     Parameters
     ----------
     queue : WorkQueue
         Durable stage queue.
     llm : LLMClient
-        Approver (stub auto-rules or Grok reflection for high value).
+        Approver. Stub uses rules. Grok uses reflection for high value.
     events : EventSink
         Append-only event log.
     metrics : MetricsCollector
-        Approval / reflection counters.
+        Approval and reflection counters.
 
     Notes
     -----
     The CLI has no interactive human reject. Rejection happens when:
 
     * validation left issues, or
-    * the LLM/stub returns ``approved=False``, or
+    * the LLM or stub returns ``approved=False``, or
     * ``PolicyEngine.issue_permit`` denies payment.
 
-    Human reject / escalate lives in the FastAPI workbench, not the CLI.
+    Human reject and escalate live in the FastAPI workbench, not in the CLI.
     """
 
     def __init__(
@@ -368,14 +368,14 @@ class ApprovalWorker:
 
 
 class PaymentWorker:
-    """Verify the PaymentPermit, run the payment saga, emit success or failure.
+    """Verify the PaymentPermit. Run the payment saga. Emit success or failure.
 
     Parameters
     ----------
     queue : WorkQueue
         Durable stage queue.
     saga : PaymentSaga
-        Idempotent mock payment + outbox writer.
+        Idempotent mock payment and outbox writer.
     events : EventSink
         Append-only event log.
     metrics : MetricsCollector
@@ -383,8 +383,8 @@ class PaymentWorker:
 
     Notes
     -----
-    Missing or invalid permits refuse payment. Policy and payment errors both
-    emit ``PaymentFailed`` so the CLI status is not stuck on ``approved``.
+    Missing or bad permits refuse payment. Policy and payment errors both
+    emit ``PaymentFailed``. The CLI status does not stay on ``approved``.
     """
 
     def __init__(

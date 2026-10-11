@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Galatiq case CLI entrypoint.
+"""Galatiq case CLI entry point.
 
 Usage
 -----
-python main.py --invoice_path=data/invoices/invoice1.txt          # Grok by default (summary JSON)
-python main.py --invoice_path=data/invoices/invoice1.txt -v       # full audit JSON
+python main.py --invoice_path=data/invoices/invoice1.txt
+python main.py --invoice_path=data/invoices/invoice1.txt -v
 python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
 python main.py --all
 python main.py --sim=case --llm=stub
+
+Notes
+-----
+The first command is the case CLI contract.
+The default engine is Grok. Use ``--llm=stub`` for offline work.
 """
 
 from __future__ import annotations

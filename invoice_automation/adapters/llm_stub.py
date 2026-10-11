@@ -16,12 +16,13 @@ from invoice_automation.resilience.policies import CircuitBreaker
 
 
 class OfflineLLM:
-    """Deterministic extractor/approver implementing LLMClient.
+    """Deterministic extractor and approver that implements LLMClient.
 
     Notes
     -----
-    Uses format parsers rather than a live model so CI is reproducible.
-    Self-correction retries parse with light text normalization.
+    This class uses format parsers. It does not call a live model.
+    CI stays reproducible. Self-correction retries parse after light
+    text cleanup.
     """
 
     def __init__(self) -> None:

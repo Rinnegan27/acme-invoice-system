@@ -1,4 +1,4 @@
-"""SQLite inventory repository matching Galatiq seed data."""
+"""SQLite inventory store that matches the Galatiq seed data."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from invoice_automation.adapters.sqlite_db import connect
 from invoice_automation.case_brief import INVENTORY_SCHEMA_SQL, INVENTORY_SEED
 from invoice_automation.domain.models import LineItem
 
-# Case README seed — kept as DEFAULT_SEED for call-site clarity.
+# Case README seed. Kept as DEFAULT_SEED for clear call sites.
 DEFAULT_SEED: tuple[tuple[str, int], ...] = INVENTORY_SEED
 
 
 class SqliteInventoryRepository:
-    """Inventory availability checker backed by SQLite."""
+    """Check item stock in a local SQLite file."""
 
     def __init__(self, db_path: str | Path, *, reseeds: bool = True) -> None:
         self.db_path = Path(db_path)

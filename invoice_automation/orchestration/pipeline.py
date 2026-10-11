@@ -106,7 +106,7 @@ class ReviewDraft:
 
 
 class Pipeline:
-    """Compose adapters and drain stage queues to completion.
+    """Build adapters and drain stage queues until work ends.
 
     Parameters
     ----------
