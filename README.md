@@ -187,27 +187,6 @@ We do not plan these changes:
 - Port to LangGraph, CrewAI, or AutoGen. The case allows a custom solution. This repo uses a custom SQLite queue pipeline.
 - Expand the deprecated Streamlit `ui/`. Product UI is FastAPI `web/` only.
 
-## How this solution meets the requirements
-
-This build covers the full Galatiq case surface.
-
-| Requirement | How we deliver it |
-|---|---|
-| Four stages: Ingestion → Validation → Approval → Payment | Durable SQLite stage queues + workers in `invoice_automation/agents/` |
-| Inventory seed (WidgetA/B, GadgetX, FakeItem) | `case_brief.INVENTORY_SEED` reseeds on pipeline start |
-| Scenario table (1001, 1002, 1003, 1008, 1009, 1016, …) | `docs/scenario_proof.*` + `--sim=case` (W1–W10) + 100-file corpus |
-| `mock_payment(vendor, amount)` | Case-brief mock → `MockPaymentGateway` + payment saga |
-| Grok / offline LLM | Default CLI = Grok; `--llm=stub` for CI |
-| CLI contract path | `python main.py --invoice_path=data/invoices/invoice1.txt` |
-| Structured audit trail | JSONL events, outbox publish, metrics snapshot |
-| Offline / no live payment rails | Stub LLM + mock gateway |
-| Multi-format corpus | txt / json / csv / xml / pdf under `data/invoices/` |
-| High-value scrutiny | Stub/Grok reflection over $10k; Control Centre Approvals desk |
-| Human-in-the-loop | Exceptions, escalate, approve/decline in FastAPI `web/` |
-| Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
-| Fail-closed extraction | Missing totals and bad keys do not silently succeed |
-| Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
-
 ## What this system does
 
 Acme Corp loses about **$2M/year** on manual invoice work (**30% error rate**, **5-day cycle**).
@@ -308,5 +287,26 @@ CLAUDE.md                   # Coding rules
 | Agentic sophistication | Multi-stage agents, optional Grok, self-correction |
 | Shipping mindset | Offline-first; Control Centre UI |
 | Above and beyond | Workbench, Case Lab, PaymentPermit, 100-file corpus |
+
+## How this solution meets the requirements
+
+This build covers the full Galatiq case surface.
+
+| Requirement | How we deliver it |
+|---|---|
+| Four stages: Ingestion → Validation → Approval → Payment | Durable SQLite stage queues + workers in `invoice_automation/agents/` |
+| Inventory seed (WidgetA/B, GadgetX, FakeItem) | `case_brief.INVENTORY_SEED` reseeds on pipeline start |
+| Scenario table (1001, 1002, 1003, 1008, 1009, 1016, …) | `docs/scenario_proof.*` + `--sim=case` (W1–W10) + 100-file corpus |
+| `mock_payment(vendor, amount)` | Case-brief mock → `MockPaymentGateway` + payment saga |
+| Grok / offline LLM | Default CLI = Grok; `--llm=stub` for CI |
+| CLI contract path | `python main.py --invoice_path=data/invoices/invoice1.txt` |
+| Structured audit trail | JSONL events, outbox publish, metrics snapshot |
+| Offline / no live payment rails | Stub LLM + mock gateway |
+| Multi-format corpus | txt / json / csv / xml / pdf under `data/invoices/` |
+| High-value scrutiny | Stub/Grok reflection over $10k; Control Centre Approvals desk |
+| Human-in-the-loop | Exceptions, escalate, approve/decline in FastAPI `web/` |
+| Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
+| Fail-closed extraction | Missing totals and bad keys do not silently succeed |
+| Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
 
 See [CLAUDE.md](CLAUDE.md) for coding rules.
