@@ -22,8 +22,18 @@
         <a href="/approvals" class="{% if nav == 'approvals' %}active{% endif %}">Approvals</a>
         {% endif %}
         <a href="/audit" class="{% if nav == 'audit' %}active{% endif %}">Audit</a>
+        <a href="/login" class="{% if nav == 'login' %}active{% endif %}">Sign in</a>
       </nav>
       <div class="role-box">
+        {% if signed_in %}
+        <div style="font-size:0.75rem;opacity:0.8;margin-bottom:0.5rem">
+          Signed in as <strong>{{ actor }}</strong>
+        </div>
+        {% else %}
+        <div style="font-size:0.75rem;opacity:0.8;margin-bottom:0.5rem">
+          Browse only — <a href="/login">sign in</a> to pay
+        </div>
+        {% endif %}
         <form method="post" action="/session">
           <label for="role">Working as</label>
           <select id="role" name="role" onchange="this.form.submit()">

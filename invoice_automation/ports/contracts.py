@@ -30,6 +30,14 @@ class InventoryRepository(Protocol):
         """Return issue codes; empty list means valid."""
         ...
 
+    def decrement_stock(self, items: Sequence[LineItem]) -> None:
+        """Decrement stock after a successful payment. Raise on shortfall."""
+        ...
+
+    def reseed(self) -> None:
+        """Restore seed stock and master data (demo / sim hygiene)."""
+        ...
+
 
 @runtime_checkable
 class LLMClient(Protocol):

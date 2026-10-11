@@ -68,6 +68,10 @@ class _ApproveModel(BaseModel):
     reflected: bool = True
 
 
+# Pinned prompt versions for eval / change control (bump when text changes).
+EXTRACT_PROMPT_VERSION = "extract-v1"
+APPROVE_PROMPT_VERSION = "approve-v1"
+
 EXTRACT_SYSTEM = """You extract structured invoice data for Acme Corp.
 Return ONLY valid JSON with keys:
 invoice_id (string), vendor (string), amount (number), due_date (YYYY-MM-DD or null),
@@ -186,7 +190,10 @@ class GrokLLM:
         self.model = model or os.getenv("XAI_MODEL", GROK_MODEL)
         self.timeout_s = timeout_s
         self.metrics = metrics
-        self.breaker = CircuitBreaker(failure_threshold=3, recovery_timeout_s=60.0)
+        # Tighter breaker: open faster on provider faults; longer cool-down.
+        self.breaker = CircuitBreaker(failure_threshold=2, recovery_timeout_s=90.0)
+        self.extract_prompt_version = EXTRACT_PROMPT_VERSION
+        self.approve_prompt_version = APPROVE_PROMPT_VERSION
         if not is_live_xai_key(self.api_key):
             raise RuntimeError(
                 "XAI_API_KEY is required for GrokLLM "

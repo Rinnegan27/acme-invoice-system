@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Galatiq AP{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>Mock IdP sign-in</h1>
+  <p class="lead">
+    Local OIDC-shaped login. Issuer: <code>{{ idp_issuer }}</code>.
+    This is not a live Okta tenant.
+  </p>
+</section>
+<form method="post" action="/login" class="card-form" style="max-width:28rem">
+  <label for="username">Demo user</label>
+  <select id="username" name="username" required>
+    {% for u in users %}
+    <option value="{{ u.username }}">{{ u.name }} ({{ u.role }}) — {{ u.username }}</option>
+    {% endfor %}
+  </select>
+  <label for="llm" style="margin-top:0.75rem">Engine</label>
+  <select id="llm" name="llm">
+    <option value="stub" {% if llm == 'stub' %}selected{% endif %}>Offline stub</option>
+    <option value="grok" {% if llm == 'grok' %}selected{% endif %}>Live Grok</option>
+  </select>
+  <button type="submit" class="btn primary" style="margin-top:1rem">Sign in</button>
+</form>
+{% endblock %}

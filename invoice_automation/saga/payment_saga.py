@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from invoice_automation.adapters.sqlite_db import apply_schema, connect
-from invoice_automation.domain.exceptions import PaymentError
-from invoice_automation.domain.models import PaymentResult
-from invoice_automation.ports.contracts import PaymentGateway
+from invoice_automation.domain.exceptions import PaymentError, ValidationError
+from invoice_automation.domain.models import LineItem, PaymentResult
+from invoice_automation.ports.contracts import InventoryRepository, PaymentGateway
 
 
 class PaymentSaga:
@@ -22,7 +23,8 @@ class PaymentSaga:
     The gateway call cannot be inside the DB transaction. We therefore:
     1. Create/upsert PaymentIntent in PENDING.
     2. Call gateway with idempotency key.
-    3. In one transaction: mark SUCCEEDED/FAILED and write outbox event.
+    3. Decrement inventory stock (fail closed).
+    4. In one transaction: mark SUCCEEDED/FAILED and write outbox event.
     Crash between 2 and 3 leaves intent PENDING and gateway idempotent, so replay is safe.
     """
 
@@ -31,9 +33,11 @@ class PaymentSaga:
         db_path: str | Path,
         schema_path: str | Path,
         gateway: PaymentGateway,
+        inventory: InventoryRepository | None = None,
     ) -> None:
         self.db_path = Path(db_path)
         self._gateway = gateway
+        self._inventory = inventory
         with connect(self.db_path) as conn:
             apply_schema(conn, schema_path)
 
@@ -45,6 +49,7 @@ class PaymentSaga:
         amount: Decimal,
         correlation_id: str,
         idempotency_key: str | None = None,
+        items: Sequence[LineItem] = (),
     ) -> PaymentResult:
         key = idempotency_key or f"pay:{invoice_id}"
         with connect(self.db_path) as conn:
@@ -82,6 +87,13 @@ class PaymentSaga:
         if result.status != "success":
             self._finalize_failure(invoice_id, correlation_id, result.status)
             raise PaymentError(f"payment failed: {result.status}")
+
+        if self._inventory is not None and items:
+            try:
+                self._inventory.decrement_stock(items)
+            except ValidationError as exc:
+                self._finalize_failure(invoice_id, correlation_id, str(exc))
+                raise PaymentError(str(exc)) from exc
 
         self._finalize_success(invoice_id, correlation_id, result)
         return result

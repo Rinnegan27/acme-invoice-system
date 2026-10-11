@@ -238,12 +238,32 @@ Offline work uses `--llm=stub`. No live key is required for CI.
 
 ---
 
+## 🔐 Auth (mock OIDC + signed sessions)
+
+Pay and approve mutations need a **signed** session cookie (`galatiq_session`).
+
+1. Open [http://localhost:8000/login](http://localhost:8000/login)
+2. Pick a demo user (`analyst@acme.local` or `vp@acme.local`)
+3. The mock IdP issues a token. The app stores an HMAC session cookie.
+
+Unsigned legacy `galatiq_role` cookies are ignored. Actor strings on `PaymentPermit` come from the verified session subject.
+
+This is a **local mock IdP**, not a live Okta tenant. Replace `invoice_automation/auth/oidc_mock.py` when you wire real OIDC.
+
 ## 🚫 Intentional non-goals
 
 We do not plan these changes:
 
-- ❌ Port to LangGraph, CrewAI, or AutoGen. The case allows a custom solution. This repo uses a custom SQLite queue pipeline.
+- ❌ Port to LangGraph, CrewAI, AutoGen, or LangChain. The case allows a **custom solution**. This repo uses a custom SQLite queue pipeline.
 - ❌ Expand the deprecated Streamlit `ui/`. Product UI is FastAPI `web/` only.
+
+## 🗺️ Production roadmap
+
+Still open for a later commercial cut:
+
+- Live OIDC / enterprise IdP (Okta, Auth0)
+- OTLP export of stage spans (spans already write to `spans.jsonl`)
+- Mandatory PO matching beyond the optional catalog seed
 
 ---
 
@@ -371,6 +391,9 @@ CLAUDE.md                   # Coding rules
 | ⚙️ Config | python-dotenv |
 | ✅ Quality | pytest, ruff, Makefile, GitHub Actions |
 | 🔐 Payment fence | HMAC `PaymentPermit` (stdlib `hmac` / `hashlib`) |
+| 🔑 Workbench auth | Mock OIDC IdP + HMAC signed session cookie |
+| 📦 Master data | SQLite stock + unit-price catalog + PO seed; stock decrement on pay |
+| 📡 Spans | OTel-shaped JSONL (`spans.jsonl`) + optional `opentelemetry-api` |
 | ✍️ Docs style | ASD-STE for README, comments, and operator text; NumPy docstrings for public APIs |
 
 See [CHANGELOG.md](CHANGELOG.md) for version history. GitHub Releases hold the same notes.

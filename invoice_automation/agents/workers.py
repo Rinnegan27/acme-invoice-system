@@ -442,6 +442,7 @@ class PaymentWorker:
                 amount=invoice.amount,
                 correlation_id=correlation_id,
                 idempotency_key=f"pay:{payment_id}",
+                items=invoice.items,
             )
             engine.verify_permit(
                 permit_data,

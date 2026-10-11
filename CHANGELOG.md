@@ -7,7 +7,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-No version bump yet. Docs and build-target polish after 1.1.1.
+### Added
+
+- Mock OIDC IdP + HMAC-signed workbench sessions (`/login`, `galatiq_session` cookie).
+- Unit-price catalog + optional PO coverage checks; stock decrement after successful pay.
+- OpenTelemetry-shaped stage spans in `spans.jsonl` (optional `opentelemetry-api`).
+- HV fraud eval fixtures under `data/evals/hv_fraud/` + stub eval tests.
+- Pinned Grok prompt versions (`extract-v1` / `approve-v1`); tighter Grok circuit breaker.
+
+### Changed
+
+- Inventory availability sums quantities by SKU (INV-1013 multi-line oversell → `insufficient_stock`).
+- Case contract: W6b expects reject on 1013; W6a/W6a2 use in-stock HV `invoice_1160.txt`.
+
+### Notes
+
+- Custom orchestration stays. No LangChain / LangGraph migration.
+- Unit-price / PO checks are opt-in (`require_price_check` / `require_po`); catalog tables are seeded.
+- Roadmap: live OIDC tenant, OTLP export, mandatory PO matching.
 
 ## [1.1.1] — 2026-10-11
 

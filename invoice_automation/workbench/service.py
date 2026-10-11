@@ -31,8 +31,9 @@ class WorkbenchService:
         self.pipeline = Pipeline(work_dir=self.work_dir / "pipeline", use_grok=use_grok)
 
     def reset(self) -> None:
-        """Clear all workbench invoices (demo hygiene)."""
+        """Clear all workbench invoices and reseed inventory (demo hygiene)."""
         self.store.clear_all()
+        self.pipeline.inventory.reseed()
 
     def ingest_file(self, path: str | Path, *, actor_role: str = "analyst") -> WorkbenchRecord:
         path = Path(path).resolve()
@@ -291,7 +292,7 @@ class WorkbenchService:
             return updated
         return self.analyst_submit_pay(record_id)
 
-    def analyst_submit_pay(self, record_id: int) -> WorkbenchRecord:
+    def analyst_submit_pay(self, record_id: int, *, actor: str = "analyst") -> WorkbenchRecord:
         """Analyst may pay only clear, non-high-value, non-blocked invoices."""
         record = self._require(record_id)
         if record.hard_blocked:
@@ -304,7 +305,7 @@ class WorkbenchService:
             raise ValidationError("Resolve validation findings or escalate to VP")
         return self._pay(
             record,
-            actor_role="analyst",
+            actor_role=actor,
             reason="Analyst approved & paid",
             allow_soft_override=False,
         )
@@ -315,6 +316,7 @@ class WorkbenchService:
         *,
         note: str = "",
         policy_override: bool = False,
+        actor: str = "vp",
     ) -> WorkbenchRecord:
         record = self._require(record_id)
         if record.hard_blocked:
@@ -325,17 +327,17 @@ class WorkbenchService:
             self.store.add_event(
                 record.correlation_id,
                 "PolicyOverride",
-                "vp",
+                actor,
                 {"issues": list(record.issues), "note": note},
             )
         return self._pay(
             record,
-            actor_role="vp",
+            actor_role=actor,
             reason=note or "VP approved & paid",
             allow_soft_override=policy_override,
         )
 
-    def vp_approve_all(self, *, note: str = "") -> tuple[int, int, list[str]]:
+    def vp_approve_all(self, *, note: str = "", actor: str = "vp") -> tuple[int, int, list[str]]:
         """Approve & pay clean VP-desk invoices only (no policy override).
 
         Returns
@@ -355,6 +357,7 @@ class WorkbenchService:
                     record.id,
                     note=note or "VP bulk approve & pay",
                     policy_override=False,
+                    actor=actor,
                 )
                 approved += 1
             except ValidationError as exc:
@@ -362,14 +365,14 @@ class WorkbenchService:
                 skipped += 1
         return approved, skipped, errors
 
-    def vp_reject_all(self, *, reason: str = "") -> tuple[int, list[str]]:
+    def vp_reject_all(self, *, reason: str = "", actor: str = "vp") -> tuple[int, list[str]]:
         """Reject every invoice currently on the VP desk."""
         rejected = 0
         errors: list[str] = []
         reason = reason or "VP bulk reject"
         for record in list(self.list_vp_queue()):
             try:
-                self.decline(record.id, actor_role="vp", reason=reason)
+                self.decline(record.id, actor_role=actor, reason=reason)
                 rejected += 1
             except ValidationError as exc:
                 errors.append(f"{record.invoice_id}: {exc}")

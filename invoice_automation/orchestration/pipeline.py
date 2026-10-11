@@ -141,10 +141,13 @@ class Pipeline:
         self.events = JsonlEventLog(event_log_path or self.work_dir / "events.jsonl")
         self.metrics = InMemoryMetrics()
         self.gateway = MockPaymentGateway()
-        self.saga = PaymentSaga(db_path, SCHEMA_PATH, self.gateway)
+        self.saga = PaymentSaga(db_path, SCHEMA_PATH, self.gateway, inventory=self.inventory)
         self.outbox = OutboxPublisher(self.saga, self.events)
         self.policy = configure_policy_engine(db_path=db_path, secret=permit_secret)
         self.llm = self._build_llm(use_grok)
+        from invoice_automation.telemetry.spans import SpanExporter
+
+        self.spans = SpanExporter(self.work_dir / "spans.jsonl")
 
         self.ingestion = IngestionWorker(self.queue, self.llm, self.events, self.metrics)
         self.validation = ValidationWorker(self.queue, self.inventory, self.events, self.metrics)
@@ -200,18 +203,24 @@ class Pipeline:
         stages : iterable of StageName or None
             Stages to drain. Default drains all stages.
         """
+        from invoice_automation.telemetry.spans import stage_span
+
         budget = self.max_steps if max_steps is None else max_steps
         allowed = set(stages) if stages is not None else set(StageName)
         for _ in range(1, budget + 1):
             progressed = False
             if StageName.INGESTION in allowed:
-                progressed |= self.ingestion.process_one()
+                with stage_span(self.spans, "stage.ingestion"):
+                    progressed |= self.ingestion.process_one()
             if StageName.VALIDATION in allowed:
-                progressed |= self.validation.process_one()
+                with stage_span(self.spans, "stage.validation"):
+                    progressed |= self.validation.process_one()
             if StageName.APPROVAL in allowed:
-                progressed |= self.approval.process_one()
+                with stage_span(self.spans, "stage.approval"):
+                    progressed |= self.approval.process_one()
             if StageName.PAYMENT in allowed:
-                progressed |= self.payment.process_one()
+                with stage_span(self.spans, "stage.payment"):
+                    progressed |= self.payment.process_one()
             if not progressed:
                 break
         else:

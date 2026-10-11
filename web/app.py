@@ -12,6 +12,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from invoice_automation.auth import (
+    MockOidcIdp,
+    SessionClaims,
+    issue_session_cookie,
+    verify_session_cookie,
+)
+from invoice_automation.auth.session import COOKIE_NAME
 from invoice_automation.domain.exceptions import ValidationError
 from invoice_automation.sim.runner import SimReport, run_case_simulation
 from web.analytics import (
@@ -38,15 +45,38 @@ templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 app = FastAPI(title="Galatiq AP Control Centre")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 
+_IDP = MockOidcIdp()
+
+
+def _claims(request: Request) -> SessionClaims | None:
+    """Return verified session claims, or None when missing/invalid."""
+    return verify_session_cookie(request.cookies.get(COOKIE_NAME))
+
 
 def _session(request: Request) -> tuple[str, str]:
-    role = request.cookies.get("galatiq_role", "analyst")
-    llm = request.cookies.get("galatiq_llm", "stub")
-    if role not in {"analyst", "vp"}:
-        role = "analyst"
-    if llm not in {"stub", "grok"}:
-        llm = "stub"
-    return role, llm
+    """Role and LLM from a verified HMAC session only (no unsigned role cookie)."""
+    claims = _claims(request)
+    if claims is None:
+        # Legacy unsigned cookies are ignored. Default to analyst/stub for browse.
+        return "analyst", "stub"
+    return claims.role, claims.llm
+
+
+def _actor(request: Request) -> str:
+    claims = _claims(request)
+    return claims.actor if claims is not None else "analyst"
+
+
+def _require_session(request: Request) -> SessionClaims | RedirectResponse:
+    """Mutations require a verified session cookie."""
+    claims = _claims(request)
+    if claims is None:
+        return _redirect(
+            "/login",
+            flash_kind="err",
+            flash_msg="Sign in required. Use the mock IdP login (signed session).",
+        )
+    return claims
 
 
 def _flash(request: Request) -> dict[str, str] | None:
@@ -70,6 +100,7 @@ def _redirect(url: str, *, flash_kind: str = "", flash_msg: str = "") -> Redirec
 
 def _ctx(request: Request, nav: str, **extra: Any) -> dict[str, Any]:
     role, llm = _session(request)
+    claims = _claims(request)
     flash = _flash(request)
     if flash and flash.get("message"):
         from urllib.parse import unquote
@@ -80,6 +111,8 @@ def _ctx(request: Request, nav: str, **extra: Any) -> dict[str, Any]:
         "nav": nav,
         "role": role,
         "llm": llm,
+        "actor": claims.actor if claims else role,
+        "signed_in": claims is not None,
         "flash": flash,
         **extra,
     }
@@ -120,13 +153,49 @@ def _stage_meta(record) -> dict[str, Any]:
     return {"steps": steps, "current": current, "risk": risk_level(record)}
 
 
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        _ctx(request, "login", users=_IDP.list_users(), idp_issuer=_IDP.issuer),
+    )
+
+
+@app.post("/login")
+async def login(
+    username: str = Form(...),
+    llm: str = Form("stub"),
+) -> RedirectResponse:
+    token = _IDP.authenticate(username)
+    if token is None:
+        return _redirect("/login", flash_kind="err", flash_msg="Unknown mock IdP user.")
+    llm = llm if llm in {"stub", "grok"} else "stub"
+    cookie = issue_session_cookie(role=token.role, llm=llm, sub=token.sub)
+    dest = "/approvals" if token.role == "vp" else "/exceptions"
+    resp = RedirectResponse(dest, status_code=303)
+    resp.set_cookie(COOKIE_NAME, cookie, httponly=True, samesite="lax")
+    # Clear legacy unsigned cookies if present.
+    resp.delete_cookie("galatiq_role")
+    resp.delete_cookie("galatiq_llm")
+    get_service.cache_clear()
+    return resp
+
+
 @app.post("/session")
 async def set_session(role: str = Form("analyst"), llm: str = Form("stub")) -> RedirectResponse:
+    """Role switch via mock IdP demo users (issues a new signed session)."""
     role = role if role in {"analyst", "vp"} else "analyst"
+    username = "vp@acme.local" if role == "vp" else "analyst@acme.local"
+    token = _IDP.authenticate(username)
+    assert token is not None
+    llm = llm if llm in {"stub", "grok"} else "stub"
+    cookie = issue_session_cookie(role=token.role, llm=llm, sub=token.sub)
     dest = "/approvals" if role == "vp" else "/exceptions"
     resp = RedirectResponse(dest, status_code=303)
-    resp.set_cookie("galatiq_role", role)
-    resp.set_cookie("galatiq_llm", llm if llm in {"stub", "grok"} else "stub")
+    resp.set_cookie(COOKIE_NAME, cookie, httponly=True, samesite="lax")
+    resp.delete_cookie("galatiq_role")
+    resp.delete_cookie("galatiq_llm")
     get_service.cache_clear()
     return resp
 
@@ -353,15 +422,17 @@ async def approvals(request: Request) -> HTMLResponse:
 
 @app.post("/approvals/approve-all")
 async def approvals_approve_all(request: Request) -> RedirectResponse:
-    role, _ = _session(request)
-    if role != "vp":
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    if claims.role != "vp":
         return _redirect(
             "/exceptions",
             flash_kind="err",
             flash_msg="Only VP Approver can bulk-approve.",
         )
     svc = _svc(request)
-    approved, skipped, errors = svc.vp_approve_all()
+    approved, skipped, errors = svc.vp_approve_all(actor=claims.actor)
     msg = f"Approved & paid {approved} invoice(s)."
     if skipped:
         msg += f" Skipped {skipped} hard-blocked or failed."
@@ -376,15 +447,17 @@ async def approvals_approve_all(request: Request) -> RedirectResponse:
 
 @app.post("/approvals/reject-all")
 async def approvals_reject_all(request: Request) -> RedirectResponse:
-    role, _ = _session(request)
-    if role != "vp":
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    if claims.role != "vp":
         return _redirect(
             "/exceptions",
             flash_kind="err",
             flash_msg="Only VP Approver can bulk-reject.",
         )
     svc = _svc(request)
-    rejected, errors = svc.vp_reject_all()
+    rejected, errors = svc.vp_reject_all(actor=claims.actor)
     msg = f"Rejected {rejected} invoice(s)."
     if errors:
         msg += " " + "; ".join(errors[:2])
@@ -452,8 +525,10 @@ async def override_invoice(
     items_text: str = Form(...),
     analyst_notes: str = Form(""),
 ) -> RedirectResponse:
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
     svc = _svc(request)
-    role, _ = _session(request)
     try:
         svc.apply_overrides(
             record_id,
@@ -463,7 +538,7 @@ async def override_invoice(
             due_date=due_date,
             items_text=items_text,
             analyst_notes=analyst_notes,
-            actor_role=role,
+            actor_role=claims.actor,
         )
         return _redirect(
             f"/invoices/{record_id}",
@@ -476,8 +551,10 @@ async def override_invoice(
 
 @app.post("/invoices/{record_id}/pay")
 async def analyst_pay(request: Request, record_id: int) -> RedirectResponse:
-    role, _ = _session(request)
-    if role != "analyst":
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    if claims.role != "analyst":
         return _redirect(
             f"/invoices/{record_id}",
             flash_kind="err",
@@ -485,7 +562,7 @@ async def analyst_pay(request: Request, record_id: int) -> RedirectResponse:
         )
     svc = _svc(request)
     try:
-        svc.analyst_submit_pay(record_id)
+        svc.analyst_submit_pay(record_id, actor=claims.actor)
         return _redirect("/audit", flash_kind="ok", flash_msg="Invoice paid.")
     except ValidationError as exc:
         return _redirect(f"/invoices/{record_id}", flash_kind="err", flash_msg=str(exc))
@@ -493,8 +570,10 @@ async def analyst_pay(request: Request, record_id: int) -> RedirectResponse:
 
 @app.post("/invoices/{record_id}/vp-pay")
 async def vp_pay(request: Request, record_id: int) -> RedirectResponse:
-    role, _ = _session(request)
-    if role != "vp":
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    if claims.role != "vp":
         return _redirect(
             f"/invoices/{record_id}",
             flash_kind="err",
@@ -502,7 +581,11 @@ async def vp_pay(request: Request, record_id: int) -> RedirectResponse:
         )
     svc = _svc(request)
     try:
-        svc.vp_approve_pay(record_id, note="VP approved from Control Centre")
+        svc.vp_approve_pay(
+            record_id,
+            note="VP approved from Control Centre",
+            actor=claims.actor,
+        )
         return _redirect("/audit", flash_kind="ok", flash_msg="VP approved and paid.")
     except ValidationError as exc:
         return _redirect(f"/invoices/{record_id}", flash_kind="err", flash_msg=str(exc))
@@ -510,15 +593,17 @@ async def vp_pay(request: Request, record_id: int) -> RedirectResponse:
 
 @app.post("/invoices/{record_id}/escalate")
 async def escalate(request: Request, record_id: int) -> RedirectResponse:
-    role, _ = _session(request)
-    if role != "analyst":
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    if claims.role != "analyst":
         return _redirect(
             f"/invoices/{record_id}",
             flash_kind="err",
             flash_msg="Only analysts escalate into the VP queue.",
         )
     svc = _svc(request)
-    svc.escalate(record_id, actor_role=role, note="Escalated from Exceptions")
+    svc.escalate(record_id, actor_role=claims.actor, note="Escalated from Exceptions")
     return _redirect(
         "/exceptions",
         flash_kind="ok",
@@ -528,10 +613,16 @@ async def escalate(request: Request, record_id: int) -> RedirectResponse:
 
 @app.post("/invoices/{record_id}/decline")
 async def decline(request: Request, record_id: int) -> RedirectResponse:
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
     svc = _svc(request)
-    role, _ = _session(request)
     try:
-        svc.decline(record_id, actor_role=role, reason=f"Declined by {role}")
+        svc.decline(
+            record_id,
+            actor_role=claims.actor,
+            reason=f"Declined by {claims.actor}",
+        )
         return _redirect("/audit", flash_kind="ok", flash_msg="Invoice declined.")
     except ValidationError as exc:
         return _redirect(f"/invoices/{record_id}", flash_kind="err", flash_msg=str(exc))
@@ -539,8 +630,10 @@ async def decline(request: Request, record_id: int) -> RedirectResponse:
 
 @app.post("/invoices/{record_id}/return")
 async def return_to_analyst(request: Request, record_id: int) -> RedirectResponse:
-    role, _ = _session(request)
-    if role != "vp":
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    if claims.role != "vp":
         return _redirect(
             f"/invoices/{record_id}",
             flash_kind="err",

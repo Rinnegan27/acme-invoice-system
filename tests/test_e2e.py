@@ -30,7 +30,12 @@ def test_process_directory_offline(tmp_path: Path) -> None:
 
 def test_high_value_reflection_path(tmp_path: Path) -> None:
     pipe = Pipeline(work_dir=tmp_path / "runtime", use_grok=False)
-    result = pipe.process_file(DATA / "invoice_1013.json")
-    assert result.status in {"paid", "rejected", "approved"}
+    # In-stock HV fixture (1160); 1013 oversells WidgetA when lines are aggregated.
+    result = pipe.process_file(DATA / "invoice_1160.txt")
+    assert result.status == "paid"
     events = [e["event_type"] for e in result.events]
     assert "InvoiceExtracted" in events
+    assert any(
+        e.get("event_type") == "InvoiceApproved" and e.get("payload", {}).get("reflected")
+        for e in result.events
+    )
