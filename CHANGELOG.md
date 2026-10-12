@@ -7,6 +7,20 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-10-11
+
+### Added
+
+- Explicit orchestration stage graph (``stage_graph.py``) with conditional
+  edges and wavefront ``select_ready_stage`` drain.
+- Strict graph validation + wavefront / CLI stdout-purity tests.
+
+### Changed
+
+- ``configure_logging`` forces root and httpx/openai loggers onto **stderr**
+  (replaces any stdout handlers) so live Grok CLI stdout stays one JSON object.
+- ``docs/architecture.md`` matches the coded graph edges.
+
 ## [1.3.0] — 2026-10-11
 
 ### Added

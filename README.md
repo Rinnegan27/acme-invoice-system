@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.3.0"><img alt="Version" src="https://img.shields.io/badge/version-1.3.0-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.4.0"><img alt="Version" src="https://img.shields.io/badge/version-1.4.0-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
   <a href="https://github.com/Rinnegan27/galatiq-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
@@ -343,19 +343,18 @@ Case Lab: [http://localhost:8000/sim](http://localhost:8000/sim) (not in product
 
 ## 🏛️ Architecture
 
-This project uses a custom multi-stage pipeline. It uses SQLite queues, a workbench, optional Grok, and a non-LLM PaymentPermit fence. It is not LangGraph.
+This project uses a custom multi-stage pipeline with an **explicit stage graph** (wavefront drain). It uses SQLite queues, a workbench, optional Grok, and a non-LLM PaymentPermit fence. It is not LangGraph.
 
 Full diagram + OTel export path: [docs/architecture.md](docs/architecture.md).
 
 ```text
 Invoice files
-  → Deterministic parsers (+ optional LLM extract)
-  → Inventory + invariant validation (GALATIQ_PROFILE)
-  → Approval (stub/Grok) / HITL workbench
-  → HMAC PaymentPermit (required)
-  → Payment saga + outbox → JSONL
-  → RECONCILE desk when stock fails after pay
+  → ingestion → validation ─┬→ REJECT
+                            └→ approval ─┬→ REJECT
+                                         └→ payment → PAID | RECONCILE
 ```
+
+CLI/sim **stdout** is one JSON document. Logs (including live httpx) go to **stderr**.
 
 ### 🛡️ Hardening notes
 
@@ -460,7 +459,7 @@ This build covers the full Galatiq case surface.
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | 🏷️ Releases | https://github.com/Rinnegan27/galatiq-invoice-system/releases |
 
-Current package version: **1.3.0** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **1.4.0** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 

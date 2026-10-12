@@ -181,6 +181,7 @@ class Pipeline:
         self.validation = ValidationWorker(self.queue, self.inventory, self.events, self.metrics)
         self.approval = ApprovalWorker(self.queue, self.llm, self.events, self.metrics)
         self.payment = PaymentWorker(self.queue, self.saga, self.events, self.metrics)
+        self.last_drain_state: Any = None
 
     def _build_llm(self, use_grok: bool) -> Any:
         if use_grok:
@@ -230,25 +231,42 @@ class Pipeline:
             Override for ``self.max_steps``.
         stages : iterable of StageName or None
             Stages to drain. Default drains all stages.
+
+        Notes
+        -----
+        Uses the explicit stage graph (``stage_graph.select_ready_stage``):
+        each step runs the upstream-most ready stage (wavefront), not a
+        round-robin of every stage.
         """
+        from invoice_automation.orchestration.stage_graph import (
+            PipelineState,
+            select_ready_stage,
+            validate_graph,
+        )
         from invoice_automation.telemetry.spans import stage_span
 
+        validate_graph()
         budget = self.max_steps if max_steps is None else max_steps
         allowed = set(stages) if stages is not None else set(StageName)
+        workers = {
+            StageName.INGESTION: self.ingestion,
+            StageName.VALIDATION: self.validation,
+            StageName.APPROVAL: self.approval,
+            StageName.PAYMENT: self.payment,
+        }
+        state = PipelineState()
+        self.last_drain_state = state
+
         for _ in range(1, budget + 1):
-            progressed = False
-            if StageName.INGESTION in allowed:
-                with stage_span(self.spans, "stage.ingestion"):
-                    progressed |= self.ingestion.process_one()
-            if StageName.VALIDATION in allowed:
-                with stage_span(self.spans, "stage.validation"):
-                    progressed |= self.validation.process_one()
-            if StageName.APPROVAL in allowed:
-                with stage_span(self.spans, "stage.approval"):
-                    progressed |= self.approval.process_one()
-            if StageName.PAYMENT in allowed:
-                with stage_span(self.spans, "stage.payment"):
-                    progressed |= self.payment.process_one()
+            stage = select_ready_stage(self.queue.depth, allowed)
+            if stage is None:
+                break
+            state.active_stage = stage
+            state.steps += 1
+            assert state.transitions is not None
+            state.transitions.append(f"run:{stage.value}")
+            with stage_span(self.spans, f"stage.{stage.value}"):
+                progressed = workers[stage].process_one()
             if not progressed:
                 break
         else:
@@ -263,6 +281,7 @@ class Pipeline:
                         "max_steps": budget,
                         "queue_depth": depth,
                         "stages": sorted(s.value for s in allowed),
+                        "graph_steps": state.steps,
                     },
                     stage="orchestration",
                 )

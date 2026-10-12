@@ -4,27 +4,29 @@ Short operator notes for the Galatiq invoice pipeline.
 
 ## Orchestration graph
 
-Custom SQLite work-queue orchestration (not LangGraph). One drain loop claims at most one message per stage per step.
+Custom SQLite work-queue orchestration (not LangGraph). Explicit conditional edges live in `invoice_automation/orchestration/stage_graph.py`. `Pipeline.drain` selects the **upstream-most ready stage** (wavefront) each step — not a round-robin of every stage.
 
 ```mermaid
 flowchart LR
-  CLI["CLI / Control Centre"] --> ING["ingestion queue"]
-  ING --> EXT["IngestionWorker\n(Grok or stub extract)"]
-  EXT --> VALQ["validation queue"]
-  VALQ --> VAL["ValidationWorker\n(SQLite inventory)"]
-  VAL -->|issues| REJ["rejected + reason"]
-  VAL -->|clean| APPQ["approval queue"]
-  APPQ --> APP["ApprovalWorker\n(VP guardrails / Grok)"]
-  APP -->|reject| REJ
-  APP -->|approve + PaymentPermit| PAYQ["payment queue"]
-  PAYQ --> PAY["PaymentWorker"]
-  PAY --> SAGA["PaymentSaga\ngateway → stock"]
-  SAGA -->|ok| PAID["paid"]
-  SAGA -->|stock fail after pay| REC["RECONCILE\n/reconcile UI"]
+  START --> ING["ingestion"]
+  ING -->|extracted| VAL["validation"]
+  VAL -->|issues_nonempty| REJ["REJECT"]
+  VAL -->|issues_empty| APP["approval"]
+  APP -->|vp_rejected| REJ
+  APP -->|approved_with_permit| PAY["payment"]
+  PAY -->|gateway_ok_stock_ok| PAID["PAID"]
+  PAY -->|gateway_ok_stock_fail| REC["RECONCILE"]
 ```
 
+| Edge `when` | Owner |
+|-------------|--------|
+| `extracted` | `IngestionWorker` enqueues validation |
+| `issues_nonempty` / `issues_empty` | `ValidationWorker` |
+| `vp_rejected` / `approved_with_permit` | `ApprovalWorker` + HMAC permit |
+| `gateway_ok_stock_ok` / `gateway_ok_stock_fail` | `PaymentWorker` + `PaymentSaga` |
+
 Stage workers: `invoice_automation/agents/workers.py`.
-Drain: `Pipeline.drain` in `invoice_automation/orchestration/pipeline.py`.
+Drain: `Pipeline.drain` → `select_ready_stage` in `stage_graph.py`.
 
 ## Master-data profiles
 
