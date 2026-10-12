@@ -7,6 +7,22 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-10-11
+
+### Added
+
+- SKU guardrail: strip trailing parenthetical notes
+  (``WidgetA (rush order)`` → ``WidgetA``) on ``LineItem`` construct so live
+  Grok does not false-reject rush/expedite lines.
+- Invoice amount resolution: prefer TOTAL, else SUBTOTAL, else sum of
+  priced lines (qty × unit_price). Fail only when amount cannot be computed.
+  Deterministic parsers and Grok extract-v3 share the same policy.
+
+### Changed
+
+- Text/JSON/XML/CSV extract no longer fail-closed solely because TOTAL is
+  missing when unit prices (or subtotal) are present.
+
 ## [1.4.0] — 2026-10-11
 
 ### Added
@@ -130,7 +146,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.1.1...v1.2.0

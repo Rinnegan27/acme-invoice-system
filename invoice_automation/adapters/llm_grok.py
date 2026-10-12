@@ -21,7 +21,11 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
-from invoice_automation.adapters.parsers import normalize_invoice_id, parse_invoice_text
+from invoice_automation.adapters.parsers import (
+    normalize_invoice_id,
+    parse_invoice_text,
+    resolve_invoice_amount,
+)
 from invoice_automation.case_brief import GROK_MODEL, is_live_xai_key
 from invoice_automation.domain.exceptions import ExtractionError
 from invoice_automation.domain.models import (
@@ -49,7 +53,7 @@ class _LineItemModel(BaseModel):
 class _ExtractModel(BaseModel):
     invoice_id: str
     vendor: str
-    amount: Decimal
+    amount: Decimal | None = None
     due_date: str | None = None
     items: list[_LineItemModel] = Field(default_factory=list)
     notes: str = ""
@@ -70,16 +74,21 @@ class _ApproveModel(BaseModel):
 
 
 # Pinned prompt versions for eval / change control (bump when text changes).
-EXTRACT_PROMPT_VERSION = "extract-v2"
+EXTRACT_PROMPT_VERSION = "extract-v3"
 APPROVE_PROMPT_VERSION = "approve-v2"
 
 EXTRACT_SYSTEM = """You extract structured invoice data for Acme Corp.
 Return ONLY valid JSON with keys:
-invoice_id (string), vendor (string), amount (number), due_date (YYYY-MM-DD or null),
+invoice_id (string), vendor (string), amount (number or null), due_date (YYYY-MM-DD or null),
 items (array of {sku, quantity, unit_price}), notes (string).
 Prefer invoice_id in the form INV-1001 (include the INV- prefix).
 Do not invent SKUs that are not present. Quantity must be an integer.
-If data is missing, use best effort and mention gaps in notes."""
+SKU must be the catalog code only (e.g. WidgetA). Put rush/expedite notes
+in notes, not in sku — never return "WidgetA (rush order)" as sku.
+If TOTAL / amount due is missing, set amount to null and always fill unit_price
+on every line so the system can compute the total. Prefer TOTAL when present;
+otherwise prefer SUBTOTAL. Mention missing totals in notes.
+If other data is missing, use best effort and mention gaps in notes."""
 
 APPROVE_SYSTEM = """You are a VP reviewing invoices for Acme Corp.
 Return ONLY JSON: {"approved": bool, "reason": string, "reflected": true}.
@@ -141,7 +150,7 @@ EXTRACT_SCHEMA: dict[str, Any] = {
             "properties": {
                 "invoice_id": {"type": "string"},
                 "vendor": {"type": "string"},
-                "amount": {"type": "number"},
+                "amount": {"type": ["number", "null"]},
                 "due_date": {"type": ["string", "null"]},
                 "items": {
                     "type": "array",
@@ -368,21 +377,23 @@ class GrokLLM:
                 model = _ExtractModel.model_validate(data)
                 if not model.items:
                     raise ExtractionError("model returned no items")
+                items = tuple(
+                    LineItem(
+                        sku=i.sku,
+                        quantity=i.quantity,
+                        unit_price=i.unit_price,
+                    )
+                    for i in model.items
+                )
+                amount = resolve_invoice_amount(explicit=model.amount, items=items)
                 invoice = Invoice(
                     invoice_id=normalize_invoice_id(
                         model.invoice_id, fallback=Path(source_path).stem
                     ),
                     vendor=model.vendor,
-                    amount=model.amount,
+                    amount=amount,
                     due_date=_parse_grok_due_date(model.due_date),
-                    items=tuple(
-                        LineItem(
-                            sku=i.sku,
-                            quantity=i.quantity,
-                            unit_price=i.unit_price,
-                        )
-                        for i in model.items
-                    ),
+                    items=items,
                     source_path=source_path,
                     status=InvoiceStatus.EXTRACTED,
                 )

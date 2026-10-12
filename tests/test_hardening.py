@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -22,15 +23,16 @@ def test_core_package_must_not_exist() -> None:
     assert not (ROOT / "core").exists(), "dead legacy package core/ must stay deleted"
 
 
-def test_text_invoice_missing_total_fails_closed() -> None:
+def test_text_invoice_missing_total_computes_from_unit_prices() -> None:
     raw = """INVOICE
 Vendor: Widgets Inc.
 Invoice Number: INV-NO-TOTAL
 Items:
   WidgetA    qty: 2    unit price: $250.00
 """
-    with pytest.raises(ExtractionError, match="invalid_amount"):
-        parse_invoice_text(raw, "missing_total.txt")
+    inv = parse_invoice_text(raw, "missing_total.txt")
+    assert inv.amount == Decimal("500.00")
+    assert inv.items[0].unit_price == Decimal("250.00")
 
 
 def test_example_permit_secrets_rejected() -> None:

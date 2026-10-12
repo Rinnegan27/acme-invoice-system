@@ -8,6 +8,7 @@ Quantity and amount guards fail fast at construction time.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -16,6 +17,30 @@ from typing import Final
 from uuid import uuid4
 
 HIGH_VALUE_THRESHOLD: Final[Decimal] = Decimal("10000")
+
+# Trailing "(rush order)" / "(expedited)" style notes are not part of the SKU.
+_SKU_TRAILING_ANNOTATION = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def normalize_sku(raw: str) -> str:
+    """Strip trailing parenthetical annotations from a line SKU.
+
+    Parameters
+    ----------
+    raw : str
+        Extracted SKU or description fragment.
+
+    Returns
+    -------
+    str
+        Canonical SKU. ``WidgetA (rush order)`` → ``WidgetA``.
+    """
+    text = str(raw or "").strip()
+    prev = None
+    while prev != text:
+        prev = text
+        text = _SKU_TRAILING_ANNOTATION.sub("", text).strip()
+    return text
 
 
 class InvoiceStatus(str, Enum):
@@ -62,8 +87,10 @@ class LineItem:
     unit_price: Decimal | None = None
 
     def __post_init__(self) -> None:
-        if not self.sku or not self.sku.strip():
+        sku = normalize_sku(self.sku)
+        if not sku:
             raise ValueError("sku must be non-empty")
+        object.__setattr__(self, "sku", sku)
 
 
 @dataclass(frozen=True)

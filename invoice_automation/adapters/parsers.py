@@ -2,7 +2,9 @@
 
 Notes
 -----
-Missing totals fail closed. Do not coerce garbage amounts to zero.
+Prefer an explicit TOTAL. When TOTAL is missing, use SUBTOTAL, then the
+sum of priced line items (qty × unit_price). Fail only when no amount can
+be resolved. Do not coerce garbage strings to zero.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import csv
 import json
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import StringIO
@@ -116,6 +119,61 @@ def _optional_decimal(value: Any) -> Decimal | None:
     return _to_decimal(value)
 
 
+def line_items_amount(items: Sequence[LineItem]) -> Decimal | None:
+    """Return sum(qty × unit_price) when every positive-qty line is priced."""
+    total = Decimal("0")
+    priced_lines = 0
+    for item in items:
+        if item.quantity <= 0:
+            continue
+        if item.unit_price is None:
+            return None
+        total += item.unit_price * item.quantity
+        priced_lines += 1
+    if priced_lines == 0:
+        return None
+    return total
+
+
+def resolve_invoice_amount(
+    *,
+    explicit: Decimal | None,
+    items: Sequence[LineItem],
+    subtotal: Decimal | None = None,
+) -> Decimal:
+    """Resolve payable amount from total, subtotal, or priced lines.
+
+    Parameters
+    ----------
+    explicit : Decimal or None
+        TOTAL / amount due when present on the document.
+    items : sequence of LineItem
+        Extracted lines (used when total/subtotal are missing).
+    subtotal : Decimal or None
+        SUBTOTAL when present (used before line-sum fallback).
+
+    Returns
+    -------
+    Decimal
+        Resolved invoice amount.
+
+    Raises
+    ------
+    ExtractionError
+        When no total, subtotal, or complete priced line sum is available.
+    """
+    if explicit is not None:
+        return explicit
+    if subtotal is not None:
+        return subtotal
+    computed = line_items_amount(items)
+    if computed is not None and computed > 0:
+        return computed
+    raise ExtractionError(
+        "invalid_amount: missing total/subtotal and cannot compute from line items"
+    )
+
+
 def _parse_date(value: Any) -> date | None:
     if value is None or value == "":
         return None
@@ -156,8 +214,13 @@ def _from_json(raw: str, source_path: str) -> Invoice:
         or Path(source_path).stem
     )
     vendor = _vendor_from_json(data)
-    amount = _to_decimal(data.get("total") if data.get("total") is not None else data.get("amount"))
     due_date = _parse_date(data.get("due_date"))
+    explicit = None
+    if data.get("total") is not None or data.get("amount") is not None:
+        explicit = _to_decimal(
+            data.get("total") if data.get("total") is not None else data.get("amount")
+        )
+    subtotal = _optional_decimal(data.get("subtotal"))
 
     items: list[LineItem] = []
     for item in data.get("line_items") or data.get("items") or []:
@@ -174,7 +237,7 @@ def _from_json(raw: str, source_path: str) -> Invoice:
     return Invoice(
         invoice_id=invoice_id,
         vendor=vendor or "Unknown",
-        amount=amount,
+        amount=resolve_invoice_amount(explicit=explicit, items=items, subtotal=subtotal),
         due_date=due_date,
         items=tuple(items),
         source_path=source_path,
@@ -297,17 +360,11 @@ def _from_tabular_csv(raw: str, source_path: str, header: list[str]) -> Invoice:
 
     if not items:
         raise ExtractionError("tabular CSV has no line items")
-    if amount == 0:
-        priced = [i for i in items if i.unit_price is not None]
-        if not priced:
-            raise ExtractionError("invalid_amount: tabular CSV missing total and line unit prices")
-        amount = sum((i.unit_price or Decimal("0")) * i.quantity for i in priced)
-        if amount == 0:
-            raise ExtractionError("invalid_amount: tabular CSV total resolved to 0")
+    explicit = amount if amount > 0 else None
     return Invoice(
         invoice_id=invoice_id,
         vendor=vendor,
-        amount=amount,
+        amount=resolve_invoice_amount(explicit=explicit, items=items),
         due_date=due_date,
         items=tuple(items),
         source_path=source_path,
@@ -325,18 +382,21 @@ def _from_csv_wide_fallback(lines: list[str], header: list[str], source_path: st
         except ValueError:
             return default
 
+    items = (
+        LineItem(
+            sku=col("item") or col("sku") or "UNKNOWN",
+            quantity=int(col("quantity") or col("qty") or "0"),
+            unit_price=_optional_decimal(col("unit_price") or col("price") or None),
+        ),
+    )
+    explicit_raw = col("amount") or col("total") or ""
+    explicit = _to_decimal(explicit_raw) if explicit_raw else None
     return Invoice(
         invoice_id=col("invoice_id") or col("invoice_number") or Path(source_path).stem,
         vendor=col("vendor") or col("supplier") or "Unknown",
-        amount=_to_decimal(col("amount") or col("total") or None),
+        amount=resolve_invoice_amount(explicit=explicit, items=items),
         due_date=_parse_date(col("due_date")),
-        items=(
-            LineItem(
-                sku=col("item") or col("sku") or "UNKNOWN",
-                quantity=int(col("quantity") or col("qty") or "0"),
-                unit_price=_optional_decimal(col("unit_price") or col("price") or None),
-            ),
-        ),
+        items=items,
         source_path=source_path,
         status=InvoiceStatus.EXTRACTED,
     )
@@ -362,7 +422,8 @@ def _from_xml(raw: str, source_path: str) -> Invoice:
         find_text("header/invoice_number") or find_text("invoice_number") or Path(source_path).stem
     )
     vendor = find_text("header/vendor") or find_text("vendor") or "Unknown"
-    amount = _to_decimal(find_text("totals/total") or find_text("total"))
+    total_raw = find_text("totals/total") or find_text("total")
+    subtotal_raw = find_text("totals/subtotal") or find_text("subtotal")
     due_date = _parse_date(find_text("header/due_date") or find_text("due_date"))
 
     items: list[LineItem] = []
@@ -387,7 +448,11 @@ def _from_xml(raw: str, source_path: str) -> Invoice:
     return Invoice(
         invoice_id=invoice_id,
         vendor=vendor,
-        amount=amount,
+        amount=resolve_invoice_amount(
+            explicit=_to_decimal(total_raw) if total_raw else None,
+            items=items,
+            subtotal=_to_decimal(subtotal_raw) if subtotal_raw else None,
+        ),
         due_date=due_date,
         items=tuple(items),
         source_path=source_path,
@@ -463,9 +528,10 @@ def _from_text(raw: str, source_path: str) -> Invoice:
         r"(?:Total\s*Amount|Amount\s*Due|(?<![A-Za-z])TOTAL|(?<![A-Za-z])Total|(?<![A-Za-z])Amt)\s*[:\s]+\$?([\d,]+\.?\d*)",
         raw,
     )
-    if not amount_raw:
-        raise ExtractionError("invalid_amount: missing total/amount in text invoice")
-    amount = _to_decimal(amount_raw)
+    subtotal_raw = _find(
+        r"(?:Sub\s*-?\s*Total|Subtotal)\s*[:\s]+\$?([\d,]+\.?\d*)",
+        raw,
+    )
     due_date = _parse_date(_find(r"(?:Due\s*Date|Due\s*Dt|Due)\s*[:]\s*(.+)", raw))
 
     items: list[LineItem] = []
@@ -541,10 +607,30 @@ def _from_text(raw: str, source_path: str) -> Invoice:
     if not items:
         raise ExtractionError("could not extract line items from text")
 
+    # Also pick up "unit price: $250" when the first pass missed the price group.
+    for idx, item in enumerate(items):
+        if item.unit_price is not None:
+            continue
+        m = re.search(
+            rf"{re.escape(item.sku)}.*?unit\s*price\s*[:\s]+\$?([\d,.]+)",
+            raw,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if m:
+            items[idx] = LineItem(
+                sku=item.sku,
+                quantity=item.quantity,
+                unit_price=_to_decimal(m.group(1)),
+            )
+
     return Invoice(
         invoice_id=str(invoice_id).strip(),
         vendor=vendor.strip().split("\n")[0].strip(),
-        amount=amount,
+        amount=resolve_invoice_amount(
+            explicit=_to_decimal(amount_raw) if amount_raw else None,
+            items=items,
+            subtotal=_to_decimal(subtotal_raw) if subtotal_raw else None,
+        ),
         due_date=due_date,
         items=tuple(items),
         source_path=source_path,
