@@ -506,7 +506,11 @@ _SKU_DENYLIST = {
 
 def _from_text(raw: str, source_path: str) -> Invoice:
     invoice_id = (
-        _find(r"Invoice\s*(?:Number|#|Num)?\s*[:#]?\s*(INV-?\d+|\d{3,})", raw)
+        # Require a digit so the word "Invoice" itself never matches as an id.
+        _find(
+            r"Invoice\s*(?:Number|#|Num)?\s*[:#]?\s*(INV-?\d+[A-Z0-9]*|\d{3,})",
+            raw,
+        )
         or _find(r"INV\s*NO\s*[:#]?\s*(INV[-\s]?\d+|\d{3,})", raw)
         or _find(r"Inv\s*#\s*[:#]?\s*(\d+)", raw)
         or Path(source_path).stem
@@ -536,7 +540,8 @@ def _from_text(raw: str, source_path: str) -> Invoice:
 
     items: list[LineItem] = []
     patterns = [
-        r"(?m)^\s*-?\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(?:qty[:\s]+|x\s*)?(\d+)\s*(?:@|x)?\s*\$?([\d,.]+)?",
+        # Do not treat the letter in "Gadget X" as a qty marker; only bare "x5".
+        r"(?m)^\s*-?\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(?:qty[:\s]+|x(?=\d))?(\d+)\s*(?:@|x)?\s*\$?([\d,.]+)?",
         r"(?m)^\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(\d+)\s+\$([\d,.]+)\s+\$([\d,.]+)",
         r"Item[:\s]+([A-Za-z0-9_\-]+).*?Qty[:\s]+(\d+)",
         r"([A-Za-z][A-Za-z0-9_\-]*)\s+x(\d+)\s+\$?([\d,.]+)",

@@ -261,3 +261,40 @@ class SqliteInventoryRepository:
             except Exception:
                 conn.rollback()
                 raise
+
+    def increment_stock(self, items: Sequence[LineItem]) -> None:
+        """Restore stock when a revision removes or reduces lines.
+
+        Parameters
+        ----------
+        items : sequence of LineItem
+            Lines to restore. Quantities are summed by SKU.
+
+        Raises
+        ------
+        ValidationError
+            When any SKU is missing from inventory.
+        """
+        qty_by_sku: dict[str, int] = {}
+        for item in items:
+            if item.quantity <= 0:
+                continue
+            qty_by_sku[item.sku] = qty_by_sku.get(item.sku, 0) + item.quantity
+
+        with connect(self.db_path) as conn:
+            try:
+                for sku, qty in qty_by_sku.items():
+                    cur = conn.execute(
+                        """
+                        UPDATE inventory
+                        SET stock = stock + ?
+                        WHERE item = ?
+                        """,
+                        (qty, sku),
+                    )
+                    if cur.rowcount != 1:
+                        raise ValidationError(f"stock_increment_failed:{sku}")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise

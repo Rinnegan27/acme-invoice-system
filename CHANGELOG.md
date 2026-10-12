@@ -7,6 +7,26 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-10-12
+
+### Added
+
+- Soft ``sku_typo_review`` findings when extract maps spaced labels
+  (``Widget A`` / ``Gadget X``) to catalog SKUs. Validation escalates to VP
+  reflection instead of silent under-$10k auto-pay (INV-1012 path).
+- Payment dedupe / revision: same ``invoice_id`` with identical payload
+  (e.g. ``1011.txt`` + ``1011.pdf``) replays without a second stock draw;
+  changed lines/totals (e.g. ``1004`` → ``1004_revised``) pay the amount
+  delta, adjust stock, and store updated ``items_json``.
+- Vendor split / structuring detection: under-$10k invoices from the same
+  vendor within 5 minutes that cumulate above $10k raise
+  ``vendor_split_risk`` and escalate to VP (UAT 2.1).
+
+### Notes
+
+- Catalog unit prices live in ``inventory.db`` tables ``unit_prices`` and
+  ``unit_price_bands`` (seeded; used for validation, not invoice history).
+
 ## [1.5.0] — 2026-10-11
 
 ### Added
@@ -146,7 +166,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.2...v1.3.0

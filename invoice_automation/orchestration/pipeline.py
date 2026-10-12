@@ -178,7 +178,13 @@ class Pipeline:
         self.spans = SpanExporter(self.work_dir / "spans.jsonl")
 
         self.ingestion = IngestionWorker(self.queue, self.llm, self.events, self.metrics)
-        self.validation = ValidationWorker(self.queue, self.inventory, self.events, self.metrics)
+        self.validation = ValidationWorker(
+            self.queue,
+            self.inventory,
+            self.events,
+            self.metrics,
+            system_db_path=db_path,
+        )
         self.approval = ApprovalWorker(self.queue, self.llm, self.events, self.metrics)
         self.payment = PaymentWorker(self.queue, self.saga, self.events, self.metrics)
         self.last_drain_state: Any = None
@@ -386,14 +392,18 @@ class Pipeline:
 
     def auto_approve(self, draft: ReviewDraft) -> PipelineResult:
         """Run VP approval agent and payment when approved."""
+        from invoice_automation.policy.invariants import partition_soft_escalation_issues
+
         invoice = draft.invoice
-        if draft.issues and not invoice.is_high_value:
+        other_issues, soft = partition_soft_escalation_issues(draft.issues)
+        # Soft escalations go to VP; other issues still reject here.
+        if other_issues and not invoice.is_high_value:
             self.events.emit(
                 "InvoiceRejected",
                 draft.correlation_id,
                 invoice.invoice_id,
                 {
-                    "reason": f"Rejected due to issues: {', '.join(draft.issues)}",
+                    "reason": f"Rejected due to issues: {', '.join(other_issues)}",
                     "reflected": False,
                 },
                 stage=StageName.APPROVAL.value,
@@ -401,6 +411,8 @@ class Pipeline:
             self.metrics.incr_outcome("rejected")
             self.metrics.persist(self.work_dir / "metrics_snapshot.json")
             return self._summarize(Path(draft.source_path), draft.correlation_id)
+        if soft:
+            invoice = invoice.with_updates(issues=tuple(soft))
 
         self.queue.enqueue(
             StageName.APPROVAL,
@@ -489,7 +501,7 @@ class Pipeline:
                 if "issues" in payload:
                     issues = tuple(payload.get("issues") or ())
                 reason = str(payload.get("reason") or reason)
-            elif et == "PaymentSucceeded":
+            elif et in {"PaymentSucceeded", "PaymentRevised"}:
                 status = InvoiceStatus.PAID.value
             elif et == "PaymentStockReconcile":
                 # Gateway paid. Stock failed. Ops must reconcile.

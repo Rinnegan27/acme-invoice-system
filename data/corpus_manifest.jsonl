@@ -12,8 +12,8 @@
 {"category": "stp", "expect_status": "paid", "file": "invoice_1010.txt", "format": "txt", "invoice_id": "INV-1010"}
 {"category": "stp", "expect_status": "paid", "file": "invoice_1011.txt", "format": "txt", "invoice_id": "INV-1011"}
 {"category": "stp", "expect_status": "paid", "file": "invoice_1011.pdf", "format": "pdf", "invoice_id": "INV-1011", "notes": "TXT twin preferred by --all; still golden when processed alone"}
-{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1012.txt", "format": "txt", "invoice_id": "INV-1012"}
-{"category": "unknown_item", "expect_issue_substr": "unknown_item", "expect_status": "rejected", "file": "invoice_1012.pdf", "format": "pdf", "invoice_id": "INV-1012"}
+{"category": "sku_typo_review", "expect_status": "paid", "file": "invoice_1012.txt", "format": "txt", "invoice_id": "INV-1012"}
+{"category": "sku_typo_review", "expect_status": "paid", "file": "invoice_1012.pdf", "format": "pdf", "invoice_id": "INV-1012"}
 {"category": "high_value", "expect_status": "rejected", "file": "invoice_1013.json", "format": "json", "invoice_id": "INV-1013"}
 {"category": "high_value", "expect_status": "rejected", "file": "invoice_1013.pdf", "format": "pdf", "invoice_id": "INV-1013"}
 {"category": "stp", "expect_status": "paid", "file": "invoice_1014.xml", "format": "xml", "invoice_id": "INV-1014"}

@@ -202,3 +202,4 @@ class PaymentResult:
     amount: Decimal
     idempotency_key: str
     transaction_id: str = ""
+    revision: bool = False

@@ -29,6 +29,32 @@ def _item_from_dict(data: dict[str, Any]) -> LineItem:
     return LineItem(sku=str(data["sku"]), quantity=int(data["quantity"]), unit_price=price)
 
 
+def _qty_by_sku(items: Sequence[LineItem]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for item in items:
+        if item.quantity <= 0:
+            continue
+        out[item.sku] = out.get(item.sku, 0) + int(item.quantity)
+    return out
+
+
+def _stock_delta_items(
+    old_items: Sequence[LineItem], new_items: Sequence[LineItem]
+) -> tuple[list[LineItem], list[LineItem]]:
+    """Return (draw, restore) line lists for a revision stock adjustment."""
+    old_q = _qty_by_sku(old_items)
+    new_q = _qty_by_sku(new_items)
+    draw: list[LineItem] = []
+    restore: list[LineItem] = []
+    for sku in sorted(set(old_q) | set(new_q)):
+        delta = new_q.get(sku, 0) - old_q.get(sku, 0)
+        if delta > 0:
+            draw.append(LineItem(sku=sku, quantity=delta))
+        elif delta < 0:
+            restore.append(LineItem(sku=sku, quantity=-delta))
+    return draw, restore
+
+
 class PaymentSaga:
     """Run payment_intent, outbox, and gateway.
 
@@ -52,6 +78,9 @@ class PaymentSaga:
     4. If stock fails after a successful pay, set RECONCILE and emit
        ``PaymentStockReconcile``. Do not mark the pay as failed.
     5. On full success, set SUCCEEDED and write ``PaymentSucceeded``.
+    6. Re-pay of the same ``invoice_id`` with identical payload hash is a
+       no-op replay (format twins). A changed hash applies amount/stock
+       deltas and updates stored lines (revision).
     """
 
     def __init__(
@@ -66,6 +95,19 @@ class PaymentSaga:
         self._inventory = inventory
         with connect(self.db_path) as conn:
             apply_schema(conn, schema_path)
+            self._ensure_revision_columns(conn)
+
+    def _ensure_revision_columns(self, conn: Any) -> None:
+        cols = {str(row[1]) for row in conn.execute("PRAGMA table_info(payment_intent)")}
+        if "content_hash" not in cols:
+            conn.execute(
+                "ALTER TABLE payment_intent ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''"
+            )
+        if "items_json" not in cols:
+            conn.execute(
+                "ALTER TABLE payment_intent ADD COLUMN items_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        conn.commit()
 
     def pay(
         self,
@@ -108,32 +150,95 @@ class PaymentSaga:
             Gateway failure, or stock failure after a successful gateway pay
             (message prefix ``stock_reconcile_required:``).
         """
+        from invoice_automation.policy.engine import invoice_payload_hash
+
         key = idempotency_key or f"pay:{invoice_id}"
+        item_rows = [_item_to_dict(i) for i in items]
+        content_hash = invoice_payload_hash(
+            invoice_id=invoice_id,
+            vendor=vendor,
+            amount=amount,
+            items=item_rows,
+        )
+
         with connect(self.db_path) as conn:
+            self._ensure_revision_columns(conn)
             existing = conn.execute(
                 "SELECT * FROM payment_intent WHERE invoice_id = ?",
                 (invoice_id,),
             ).fetchone()
-            if existing and existing["status"] in {"SUCCEEDED", "RECONCILE"}:
+
+            if existing and existing["status"] == "RECONCILE":
                 return PaymentResult(
-                    status="success" if existing["status"] == "SUCCEEDED" else "reconcile",
+                    status="reconcile",
                     vendor=existing["vendor"],
                     amount=Decimal(existing["amount"]),
                     idempotency_key=existing["idempotency_key"],
                     transaction_id=f"replay:{existing['id']}",
                 )
+
+            if existing and existing["status"] == "SUCCEEDED":
+                old_hash = str(existing["content_hash"] or "")
+                if old_hash and old_hash == content_hash:
+                    # Identical business payload (e.g. pdf + txt twin) — replay.
+                    return PaymentResult(
+                        status="success",
+                        vendor=existing["vendor"],
+                        amount=Decimal(existing["amount"]),
+                        idempotency_key=existing["idempotency_key"],
+                        transaction_id=f"replay:{existing['id']}",
+                    )
+                # Changed lines/total → apply revision deltas.
+                return self._pay_revision(
+                    existing=dict(existing),
+                    invoice_id=invoice_id,
+                    vendor=vendor,
+                    amount=amount,
+                    correlation_id=correlation_id,
+                    items=items,
+                    content_hash=content_hash,
+                    source_stem=source_stem,
+                )
+
             if existing is None:
                 conn.execute(
                     """
                     INSERT INTO payment_intent (
-                        invoice_id, vendor, amount, status, idempotency_key, correlation_id
-                    ) VALUES (?, ?, ?, 'PENDING', ?, ?)
+                        invoice_id, vendor, amount, status, idempotency_key,
+                        correlation_id, content_hash, items_json
+                    ) VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?)
                     """,
-                    (invoice_id, vendor, str(amount), key, correlation_id),
+                    (
+                        invoice_id,
+                        vendor,
+                        str(amount),
+                        key,
+                        correlation_id,
+                        content_hash,
+                        json.dumps(item_rows),
+                    ),
                 )
                 conn.commit()
             else:
                 key = existing["idempotency_key"]
+                conn.execute(
+                    """
+                    UPDATE payment_intent
+                    SET vendor = ?, amount = ?, content_hash = ?, items_json = ?,
+                        correlation_id = ?, updated_at = ?
+                    WHERE invoice_id = ?
+                    """,
+                    (
+                        vendor,
+                        str(amount),
+                        content_hash,
+                        json.dumps(item_rows),
+                        correlation_id,
+                        time.time(),
+                        invoice_id,
+                    ),
+                )
+                conn.commit()
 
         try:
             result = self._gateway.pay(key, vendor, amount)
@@ -166,7 +271,114 @@ class PaymentSaga:
                 )
                 raise PaymentError(f"stock_reconcile_required:{exc}") from exc
 
-        self._finalize_success(invoice_id, correlation_id, result, source_stem=source_stem)
+        self._finalize_success(
+            invoice_id,
+            correlation_id,
+            result,
+            source_stem=source_stem,
+            content_hash=content_hash,
+            items_json=json.dumps(item_rows),
+            amount=amount,
+            vendor=vendor,
+        )
+        return result
+
+    def _pay_revision(
+        self,
+        *,
+        existing: dict[str, Any],
+        invoice_id: str,
+        vendor: str,
+        amount: Decimal,
+        correlation_id: str,
+        items: Sequence[LineItem],
+        content_hash: str,
+        source_stem: str,
+    ) -> PaymentResult:
+        """Apply amount/stock deltas when the same invoice_id returns with new lines."""
+        old_amount = Decimal(str(existing["amount"]))
+        try:
+            old_items = [
+                _item_from_dict(row) for row in json.loads(existing.get("items_json") or "[]")
+            ]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            old_items = []
+        item_rows = [_item_to_dict(i) for i in items]
+        amount_delta = amount - old_amount
+        draw, restore = _stock_delta_items(old_items, items)
+
+        gateway_result: PaymentResult | None = None
+        if amount_delta > 0:
+            rev_key = f"pay:{invoice_id}:rev:{content_hash[:16]}"
+            try:
+                gateway_result = self._gateway.pay(rev_key, vendor, amount_delta)
+            except PaymentError as exc:
+                self._finalize_failure(
+                    invoice_id, correlation_id, str(exc), source_stem=source_stem
+                )
+                raise
+            except Exception as exc:
+                self._finalize_failure(
+                    invoice_id, correlation_id, str(exc), source_stem=source_stem
+                )
+                raise PaymentError(str(exc)) from exc
+            if gateway_result.status != "success":
+                self._finalize_failure(
+                    invoice_id,
+                    correlation_id,
+                    gateway_result.status,
+                    source_stem=source_stem,
+                )
+                raise PaymentError(f"payment failed: {gateway_result.status}")
+        else:
+            gateway_result = PaymentResult(
+                status="success",
+                vendor=vendor,
+                amount=amount_delta if amount_delta != 0 else Decimal("0"),
+                idempotency_key=str(existing["idempotency_key"]),
+                transaction_id=f"revise:{existing['id']}",
+            )
+
+        if self._inventory is not None:
+            try:
+                if draw:
+                    self._inventory.decrement_stock(draw)
+                if restore:
+                    self._inventory.increment_stock(restore)
+            except ValidationError as exc:
+                self._finalize_reconcile(
+                    invoice_id,
+                    correlation_id,
+                    gateway_result,
+                    str(exc),
+                    source_stem=source_stem,
+                    items=items,
+                )
+                raise PaymentError(f"stock_reconcile_required:{exc}") from exc
+
+        result = PaymentResult(
+            status="success",
+            vendor=vendor,
+            amount=amount,
+            idempotency_key=gateway_result.idempotency_key,
+            transaction_id=gateway_result.transaction_id,
+            revision=True,
+        )
+        self._finalize_success(
+            invoice_id,
+            correlation_id,
+            result,
+            source_stem=source_stem,
+            content_hash=content_hash,
+            items_json=json.dumps(item_rows),
+            amount=amount,
+            vendor=vendor,
+            revision=True,
+            previous_amount=old_amount,
+            amount_delta=amount_delta,
+            stock_draw=[_item_to_dict(i) for i in draw],
+            stock_restore=[_item_to_dict(i) for i in restore],
+        )
         return result
 
     def _finalize_success(
@@ -176,31 +388,64 @@ class PaymentSaga:
         result: PaymentResult,
         *,
         source_stem: str = "",
+        content_hash: str = "",
+        items_json: str = "[]",
+        amount: Decimal | None = None,
+        vendor: str | None = None,
+        revision: bool = False,
+        previous_amount: Decimal | None = None,
+        amount_delta: Decimal | None = None,
+        stock_draw: list[dict[str, Any]] | None = None,
+        stock_restore: list[dict[str, Any]] | None = None,
     ) -> None:
         now = time.time()
-        payload = {
+        paid_amount = amount if amount is not None else result.amount
+        paid_vendor = vendor if vendor is not None else result.vendor
+        payload: dict[str, Any] = {
             "invoice_id": invoice_id,
-            "vendor": result.vendor,
-            "amount": str(result.amount),
+            "vendor": paid_vendor,
+            "amount": str(paid_amount),
             "idempotency_key": result.idempotency_key,
             "transaction_id": result.transaction_id,
             "source_stem": source_stem,
+            "revision": revision,
+            "content_hash": content_hash,
         }
+        if revision:
+            payload["previous_amount"] = (
+                str(previous_amount) if previous_amount is not None else None
+            )
+            payload["amount_delta"] = str(amount_delta) if amount_delta is not None else None
+            payload["stock_draw"] = stock_draw or []
+            payload["stock_restore"] = stock_restore or []
+        event_type = "PaymentRevised" if revision else "PaymentSucceeded"
         with connect(self.db_path) as conn:
             conn.execute(
                 """
                 UPDATE payment_intent
-                SET status = 'SUCCEEDED', updated_at = ?
+                SET status = 'SUCCEEDED',
+                    vendor = ?,
+                    amount = ?,
+                    content_hash = ?,
+                    items_json = ?,
+                    updated_at = ?
                 WHERE invoice_id = ?
                 """,
-                (now, invoice_id),
+                (
+                    paid_vendor,
+                    str(paid_amount),
+                    content_hash,
+                    items_json,
+                    now,
+                    invoice_id,
+                ),
             )
             conn.execute(
                 """
                 INSERT INTO outbox (aggregate_id, event_type, payload, correlation_id)
-                VALUES (?, 'PaymentSucceeded', ?, ?)
+                VALUES (?, ?, ?, ?)
                 """,
-                (invoice_id, json.dumps(payload), correlation_id),
+                (invoice_id, event_type, json.dumps(payload), correlation_id),
             )
             conn.commit()
 

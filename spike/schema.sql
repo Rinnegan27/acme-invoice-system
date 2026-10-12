@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS payment_intent (
     idempotency_key             TEXT    NOT NULL UNIQUE,
     correlation_id              TEXT    NOT NULL,
     needs_manual_reconciliation INTEGER NOT NULL DEFAULT 0,
+    content_hash                TEXT    NOT NULL DEFAULT '',
+    items_json                  TEXT    NOT NULL DEFAULT '[]',
     created_at                  REAL    NOT NULL DEFAULT (strftime('%s','now')),
     updated_at                  REAL    NOT NULL DEFAULT (strftime('%s','now'))
 );

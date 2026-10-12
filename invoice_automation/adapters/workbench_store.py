@@ -376,7 +376,11 @@ def _initial_status(
 ) -> str:
     if confidence < CONFIDENCE_OVERRIDE_THRESHOLD or self_corrected:
         return "needs_override"
-    if hard_blocked or issues:
+    if hard_blocked:
+        return "pending_review"
+    if any(str(i).startswith(p) for i in issues for p in ("sku_typo_review", "vendor_split_risk")):
+        return "awaiting_vp"
+    if issues:
         return "pending_review"
     if invoice.is_high_value:
         return "awaiting_vp"

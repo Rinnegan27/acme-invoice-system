@@ -91,9 +91,13 @@ class IngestionWorker:
         try:
             raw = _read_source(path)
             result = self.llm.extract(raw, path)
+            from invoice_automation.policy.invariants import detect_sku_typo_reviews
+
+            typo_issues = detect_sku_typo_reviews(raw, result.invoice.items)
             invoice = result.invoice.with_updates(
                 correlation_id=correlation_id,
                 source_path=str(path),
+                issues=tuple(typo_issues) if typo_issues else result.invoice.issues,
             )
             self.events.emit(
                 "InvoiceExtracted",
@@ -161,6 +165,8 @@ class ValidationWorker:
         Append-only event log.
     metrics : MetricsCollector
         Latency and outcome counters.
+    system_db_path : path or None
+        ``system.db`` for vendor split / payment-history checks.
     """
 
     def __init__(
@@ -169,11 +175,14 @@ class ValidationWorker:
         inventory: InventoryRepository,
         events: EventSink,
         metrics: MetricsCollector,
+        *,
+        system_db_path: str | Path | None = None,
     ) -> None:
         self.queue = queue
         self.inventory = inventory
         self.events = events
         self.metrics = metrics
+        self.system_db_path = Path(system_db_path) if system_db_path else None
 
     def process_one(self) -> bool:
         """Validate one invoice.
@@ -185,8 +194,7 @@ class ValidationWorker:
 
         Notes
         -----
-        Any issue code rejects in the auto CLI path. Soft issues can later be
-        overridden only via an explicit PaymentPermit in the workbench.
+        Hard issues reject. Soft escalations (SKU typo, vendor split) go to VP.
         """
         msg = self.queue.dequeue(StageName.VALIDATION)
         if msg is None:
@@ -194,11 +202,24 @@ class ValidationWorker:
         started = time.perf_counter()
         correlation_id = msg["correlation_id"]
         try:
-            from invoice_automation.policy.invariants import collect_invariant_issues
+            from invoice_automation.policy.invariants import (
+                collect_invariant_issues,
+                partition_soft_escalation_issues,
+            )
+            from invoice_automation.policy.vendor_risk import detect_vendor_split_risk
 
             invoice = invoice_from_dict(msg["payload"]["invoice"])
-            issues = self.inventory.check_availability(invoice.items)
+            issues = list(invoice.issues)
+            issues.extend(self.inventory.check_availability(invoice.items))
             issues.extend(collect_invariant_issues(invoice))
+            issues.extend(
+                detect_vendor_split_risk(
+                    invoice.vendor,
+                    invoice.amount,
+                    db_path=self.system_db_path,
+                    invoice_id=invoice.invoice_id,
+                )
+            )
             # Deduplicate while keeping order.
             seen: set[str] = set()
             uniq: list[str] = []
@@ -207,12 +228,13 @@ class ValidationWorker:
                     seen.add(issue)
                     uniq.append(issue)
             issues = uniq
+            hard_or_other, soft_escalations = partition_soft_escalation_issues(issues)
 
-            if issues:
+            if hard_or_other:
                 invoice = invoice.with_updates(
                     status=InvoiceStatus.REJECTED,
                     issues=tuple(issues),
-                    approval_reason=f"Validation failed: {', '.join(issues)}",
+                    approval_reason=f"Validation failed: {', '.join(hard_or_other)}",
                 )
                 self.events.emit(
                     "InvoiceRejected",
@@ -228,12 +250,19 @@ class ValidationWorker:
                 self.metrics.incr_rate(StageName.VALIDATION.value, "rejected")
                 self.metrics.incr_outcome("rejected")
             else:
-                invoice = invoice.with_updates(status=InvoiceStatus.VALIDATED, issues=())
+                # Soft escalations (SKU typo / vendor split) go to VP, not auto-pay.
+                invoice = invoice.with_updates(
+                    status=InvoiceStatus.VALIDATED,
+                    issues=tuple(soft_escalations),
+                )
                 self.events.emit(
                     "InvoiceValidated",
                     correlation_id,
                     invoice.invoice_id,
-                    {"invoice": invoice_to_dict(invoice)},
+                    {
+                        "invoice": invoice_to_dict(invoice),
+                        "soft_escalations": soft_escalations,
+                    },
                     stage=StageName.VALIDATION.value,
                 )
                 self.queue.enqueue(
@@ -327,12 +356,20 @@ class ApprovalWorker:
                     approval_reason=decision.reason,
                 )
                 try:
+                    from invoice_automation.policy.invariants import (
+                        is_soft_escalation,
+                        partition_soft_escalation_issues,
+                    )
+
+                    _other, soft = partition_soft_escalation_issues(invoice.issues)
+                    needs_vp = invoice.is_high_value or bool(soft)
                     # LLM text never authorizes pay — only a verified permit does.
+                    # VP may clear soft escalation findings via override.
                     permit = get_policy_engine().issue_permit(
                         invoice,
-                        actor="vp_agent" if invoice.is_high_value else "system",
+                        actor="vp_agent" if needs_vp else "system",
                         open_issues=invoice.issues,
-                        allow_soft_override=False,
+                        allow_soft_override=any(is_soft_escalation(i) for i in invoice.issues),
                     )
                 except PolicyError as exc:
                     invoice = invoice.with_updates(
@@ -505,8 +542,9 @@ class PaymentWorker:
                 consume=True,
             )
             invoice = invoice.with_updates(status=InvoiceStatus.PAID)
+            pay_event = "PaymentRevised" if result.revision else "PaymentSucceeded"
             self.events.emit(
-                "PaymentSucceeded",
+                pay_event,
                 correlation_id,
                 invoice.invoice_id,
                 {
@@ -515,10 +553,13 @@ class PaymentWorker:
                     "vendor": result.vendor,
                     "payment_id": payment_id,
                     "source_stem": source_stem,
+                    "revision": result.revision,
                 },
                 stage=StageName.PAYMENT.value,
             )
-            self.metrics.incr_rate(StageName.PAYMENT.value, "paid")
+            self.metrics.incr_rate(
+                StageName.PAYMENT.value, "revised" if result.revision else "paid"
+            )
             self.metrics.incr_outcome("paid")
             self.queue.ack(msg["id"])
         except (PaymentError, ValidationError) as exc:

@@ -16,6 +16,7 @@ import sqlite3
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -45,6 +46,8 @@ SOFT_PREFIXES: tuple[str, ...] = (
     "price_mismatch",
     "no_po_match",
     "po_qty_exceeded",
+    "sku_typo_review",
+    "vendor_split_risk",
 )
 
 _PLACEHOLDER_SECRETS = frozenset(
@@ -205,8 +208,56 @@ def resolve_permit_secret(secret: bytes | str | None = None) -> bytes:
     return raw.encode("utf-8")
 
 
+def invoice_payload_hash(
+    *,
+    invoice_id: str,
+    vendor: str,
+    amount: Decimal | str,
+    items: list[dict[str, Any]] | tuple[Any, ...],
+    due_date: str | None = None,
+) -> str:
+    """Hash business payload only (no source_path / correlation_id).
+
+    Notes
+    -----
+    Used for payment dedupe across file formats and for revision detection
+    when the same ``invoice_id`` returns with updated lines or totals.
+    """
+    norm_items: list[dict[str, Any]] = []
+    for raw in items:
+        if hasattr(raw, "sku"):
+            sku = str(raw.sku)
+            qty = int(raw.quantity)
+            price = raw.unit_price
+        else:
+            sku = str(raw.get("sku"))
+            qty = int(raw.get("quantity") or 0)
+            price = raw.get("unit_price")
+        norm_items.append(
+            {
+                "sku": sku,
+                "quantity": qty,
+                "unit_price": None if price in (None, "") else str(Decimal(str(price))),
+            }
+        )
+    norm_items.sort(key=lambda row: (row["sku"], row["quantity"], row["unit_price"] or ""))
+    amt = Decimal(str(amount)).quantize(Decimal("0.01"))
+    for row in norm_items:
+        if row["unit_price"] is not None:
+            row["unit_price"] = format(Decimal(row["unit_price"]).quantize(Decimal("0.01")), "f")
+    payload = {
+        "invoice_id": str(invoice_id),
+        "vendor": str(vendor or "").strip(),
+        "amount": format(amt, "f"),
+        "due_date": due_date,
+        "items": norm_items,
+    }
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
 def invoice_content_hash(invoice: Invoice) -> str:
-    """Stable hash of pay-critical invoice fields."""
+    """Stable hash of pay-critical invoice fields (includes run binding)."""
     payload = {
         "invoice_id": invoice.invoice_id,
         "vendor": invoice.vendor,

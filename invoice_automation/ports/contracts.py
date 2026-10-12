@@ -34,6 +34,10 @@ class InventoryRepository(Protocol):
         """Decrement stock after a successful payment. Raise on shortfall."""
         ...
 
+    def increment_stock(self, items: Sequence[LineItem]) -> None:
+        """Restore stock (e.g. revision removed lines). Raise on unknown SKU."""
+        ...
+
     def reseed(self) -> None:
         """Restore seed stock and master data (demo / sim hygiene)."""
         ...

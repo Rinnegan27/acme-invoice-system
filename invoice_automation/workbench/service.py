@@ -55,9 +55,14 @@ class WorkbenchService:
             notes=draft.notes,
             hard_blocked=draft.hard_blocked,
         )
-        # High-value clear invoices go straight to VP queue status.
+        # High-value or soft escalations go straight to VP queue status.
+        soft_escalation = any(
+            str(i).startswith(p)
+            for i in record.issues
+            for p in ("sku_typo_review", "vendor_split_risk")
+        )
         if (
-            record.high_value
+            (record.high_value or soft_escalation)
             and not record.hard_blocked
             and record.status == "pending_review"
             and not record.needs_override

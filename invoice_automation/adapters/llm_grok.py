@@ -75,7 +75,7 @@ class _ApproveModel(BaseModel):
 
 # Pinned prompt versions for eval / change control (bump when text changes).
 EXTRACT_PROMPT_VERSION = "extract-v3"
-APPROVE_PROMPT_VERSION = "approve-v2"
+APPROVE_PROMPT_VERSION = "approve-v4"
 
 EXTRACT_SYSTEM = """You extract structured invoice data for Acme Corp.
 Return ONLY valid JSON with keys:
@@ -93,8 +93,16 @@ If other data is missing, use best effort and mention gaps in notes."""
 APPROVE_SYSTEM = """You are a VP reviewing invoices for Acme Corp.
 Return ONLY JSON: {"approved": bool, "reason": string, "reflected": true}.
 Rules:
-- If issues is non-empty, reject.
-- If issues is empty and high_value is false, approve (validation already passed).
+- Hard validation issues (not soft escalations) → reject.
+- If sku_typo_reviews is non-empty, the extractor mapped spaced labels
+  (e.g. "Widget A") to catalog SKUs (WidgetA). Decide whether that typo
+  correction is acceptable. Approve only when the mapping is clearly safe;
+  otherwise reject and explain.
+- If vendor_split_risks is non-empty, multiple under-threshold invoices from
+  the same vendor recently cumulate above the high-value bar. Treat as
+  suspected structuring / split-invoice compliance risk. Prefer reject or
+  mandatory hold unless there is clear legitimate business justification.
+- If issues/soft escalations are empty and high_value is false, approve.
 - If high_value is true, scrutinize fraud, FakeItem, urgency pressure, and stock risk.
 Do not invent new validation issues that validation did not raise."""
 
@@ -427,22 +435,31 @@ class GrokLLM:
         Notes
         -----
         Guardrails (deterministic; run before/after the model):
-        1. Non-empty ``issues`` → always reject (validation already failed).
-        2. Empty ``issues`` and not high-value → always approve (matches stub /
-           case scenario matrix; model cannot invent new rejects).
+        1. Non-typo ``issues`` → always reject (validation already failed).
+        2. Empty ``issues`` and not high-value / typo-review → always approve.
         3. High-value with FakeItem → always reject.
-        4. Other high-value invoices → Grok VP reflection with ``APPROVE_SCHEMA``.
+        4. High-value or ``sku_typo_review`` → Grok VP reflection.
         """
+        from invoice_automation.policy.invariants import (
+            is_sku_typo_review,
+            is_vendor_split_risk,
+            partition_soft_escalation_issues,
+        )
+
         self.last_approve_audit = None
-        # Guardrail 1: validation findings always win.
-        if invoice.issues:
+        other_issues, soft = partition_soft_escalation_issues(invoice.issues)
+        typo_reviews = [i for i in soft if is_sku_typo_review(i)]
+        split_risks = [i for i in soft if is_vendor_split_risk(i)]
+        # Guardrail 1: hard validation findings win.
+        if other_issues:
             return ApprovalDecision(
                 approved=False,
-                reason=f"Rejected due to issues: {', '.join(invoice.issues)}",
+                reason=f"Rejected due to issues: {', '.join(other_issues)}",
                 reflected=False,
             )
-        # Guardrail 2: clean non-HV invoices follow the case matrix / stub path.
-        if not invoice.is_high_value:
+        needs_vp = invoice.is_high_value or bool(soft)
+        # Guardrail 2: clean non-HV invoices with no soft escalation auto-approve.
+        if not needs_vp:
             if invoice.amount <= 0:
                 return ApprovalDecision(
                     approved=False,
@@ -454,7 +471,7 @@ class GrokLLM:
                 reason="Auto-approved under $10k after validation (policy gate)",
                 reflected=False,
             )
-        # Guardrail 3: FakeItem never clears high-value scrutiny.
+        # Guardrail 3: FakeItem never clears high-value / escalation scrutiny.
         if any(i.sku.lower() == "fakeitem" for i in invoice.items):
             return ApprovalDecision(
                 approved=False,
@@ -471,7 +488,9 @@ class GrokLLM:
                 for i in invoice.items
             ],
             "issues": list(invoice.issues),
-            "high_value": True,
+            "high_value": invoice.is_high_value,
+            "sku_typo_reviews": typo_reviews,
+            "vendor_split_risks": split_risks,
         }
         user_prompt = json.dumps(payload)
         data = self._chat_json(

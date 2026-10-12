@@ -67,16 +67,40 @@ class OfflineLLM:
 
     def approve(self, invoice: Invoice, deadline_s: float = 30.0) -> ApprovalDecision:
         _ = deadline_s
-        if invoice.issues:
+        from invoice_automation.policy.invariants import (
+            is_vendor_split_risk,
+            partition_soft_escalation_issues,
+        )
+
+        other_issues, soft = partition_soft_escalation_issues(invoice.issues)
+        if other_issues:
             return ApprovalDecision(
                 approved=False,
-                reason=f"Rejected due to issues: {', '.join(invoice.issues)}",
-                reflected=invoice.is_high_value,
+                reason=f"Rejected due to issues: {', '.join(other_issues)}",
+                reflected=invoice.is_high_value or bool(soft),
             )
         if invoice.amount <= 0:
             return ApprovalDecision(
                 approved=False,
                 reason="Rejected: non-positive amount",
+                reflected=True,
+            )
+        split = [i for i in soft if is_vendor_split_risk(i)]
+        if split:
+            # Stub VP: hold structuring patterns for manual review (do not auto-pay).
+            return ApprovalDecision(
+                approved=False,
+                reason=(
+                    "VP rejected for suspected vendor split / structuring: " + "; ".join(split)
+                ),
+                reflected=True,
+            )
+        typo_reviews = [i for i in soft if not is_vendor_split_risk(i)]
+        if typo_reviews:
+            # Stub VP: accept clear catalog typo mappings after reflection.
+            return ApprovalDecision(
+                approved=True,
+                reason=("VP approved after SKU typo review: " + "; ".join(typo_reviews)),
                 reflected=True,
             )
         if invoice.is_high_value:
