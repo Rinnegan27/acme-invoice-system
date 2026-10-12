@@ -7,6 +7,15 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-10-12
+
+### Fixed
+
+- Revision / format-twin stock validation credits quantities already drawn
+  by a ``SUCCEEDED`` payment for the same ``invoice_id``. Availability
+  checks use ``max(0, new_qty − prior_qty)``, matching payment-saga stock
+  deltas (e.g. WidgetA 3→4 only needs +1 on the shelf).
+
 ## [1.7.0] — 2026-10-12
 
 ### Added
@@ -192,7 +201,9 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.3.0...v1.4.0

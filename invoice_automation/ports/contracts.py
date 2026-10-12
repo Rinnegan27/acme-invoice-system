@@ -26,8 +26,17 @@ from invoice_automation.domain.models import (
 class InventoryRepository(Protocol):
     """Inventory availability checks."""
 
-    def check_availability(self, items: Sequence[LineItem]) -> list[str]:
-        """Return issue codes; empty list means valid."""
+    def check_availability(
+        self,
+        items: Sequence[LineItem],
+        *,
+        prior_items: Sequence[LineItem] | None = None,
+    ) -> list[str]:
+        """Return issue codes; empty list means valid.
+
+        ``prior_items`` credits quantities already reserved by a prior
+        SUCCEEDED payment for the same invoice (revision / format twin).
+        """
         ...
 
     def decrement_stock(self, items: Sequence[LineItem]) -> None:

@@ -150,7 +150,12 @@ class WorkbenchService:
             source_path=record.source_path,
             correlation_id=record.correlation_id,
         )
-        issues = list(self.pipeline.inventory.check_availability(invoice.items))
+        from invoice_automation.saga.payment_saga import load_succeeded_line_items
+
+        prior_items = load_succeeded_line_items(self.pipeline.db_path, invoice.invoice_id)
+        issues = list(
+            self.pipeline.inventory.check_availability(invoice.items, prior_items=prior_items)
+        )
         if invoice.amount < 0:
             issues.append("negative_amount")
         if not invoice.vendor or invoice.vendor == "Unknown":

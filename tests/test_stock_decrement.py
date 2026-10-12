@@ -19,6 +19,27 @@ DATA = Path(__file__).resolve().parents[1] / "data" / "invoices"
 SCHEMA = Path(__file__).resolve().parents[1] / "spike" / "schema.sql"
 
 
+def test_check_availability_credits_prior_paid_qty(tmp_path: Path) -> None:
+    inv = SqliteInventoryRepository(tmp_path / "inv.db")
+    # Leave only 1 WidgetA on the shelf.
+    inv.decrement_stock([LineItem(sku="WidgetA", quantity=14, unit_price=Decimal("250"))])
+    assert inv.stock_levels()["WidgetA"] == 1
+    full = inv.check_availability([LineItem(sku="WidgetA", quantity=4, unit_price=Decimal("250"))])
+    assert any(i.startswith("insufficient_stock:WidgetA") for i in full)
+    # Prior paid 3 → only +1 needed; passes with 1 left.
+    delta_ok = inv.check_availability(
+        [LineItem(sku="WidgetA", quantity=4, unit_price=Decimal("250"))],
+        prior_items=[LineItem(sku="WidgetA", quantity=3, unit_price=Decimal("250"))],
+    )
+    assert not any(i.startswith(("insufficient_stock:", "zero_stock:")) for i in delta_ok)
+    # Prior paid 3, revise to 5 → need +2, only 1 left → fail.
+    delta_fail = inv.check_availability(
+        [LineItem(sku="WidgetA", quantity=5, unit_price=Decimal("250"))],
+        prior_items=[LineItem(sku="WidgetA", quantity=3, unit_price=Decimal("250"))],
+    )
+    assert any(i.startswith("insufficient_stock:WidgetA") for i in delta_fail)
+
+
 def test_soft_price_band_flags_absurd_price(tmp_path: Path) -> None:
     inv = SqliteInventoryRepository(tmp_path / "inv.db")
     issues = inv.check_availability(

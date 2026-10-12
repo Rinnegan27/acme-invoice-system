@@ -216,7 +216,12 @@ class ValidationWorker:
 
             invoice = invoice_from_dict(msg["payload"]["invoice"])
             issues = list(invoice.issues)
-            issues.extend(self.inventory.check_availability(invoice.items))
+            prior_items = None
+            if self.system_db_path is not None:
+                from invoice_automation.saga.payment_saga import load_succeeded_line_items
+
+                prior_items = load_succeeded_line_items(self.system_db_path, invoice.invoice_id)
+            issues.extend(self.inventory.check_availability(invoice.items, prior_items=prior_items))
             issues.extend(collect_invariant_issues(invoice))
             issues.extend(
                 detect_vendor_split_risk(

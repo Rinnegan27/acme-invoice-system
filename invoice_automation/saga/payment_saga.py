@@ -55,6 +55,31 @@ def _stock_delta_items(
     return draw, restore
 
 
+def load_succeeded_line_items(db_path: str | Path, invoice_id: str) -> list[LineItem] | None:
+    """Return line items from a SUCCEEDED payment_intent, or None if none.
+
+    Used by validation so stock checks credit quantities already drawn
+    for the same ``invoice_id`` (revision / format-twin paths).
+    """
+    path = Path(db_path)
+    if not path.exists():
+        return None
+    with connect(path) as conn:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(payment_intent)").fetchall()}
+        if "items_json" not in cols:
+            return None
+        existing = conn.execute(
+            "SELECT status, items_json FROM payment_intent WHERE invoice_id = ?",
+            (invoice_id,),
+        ).fetchone()
+    if existing is None or str(existing["status"]) != "SUCCEEDED":
+        return None
+    try:
+        return [_item_from_dict(row) for row in json.loads(existing["items_json"] or "[]")]
+    except (TypeError, ValueError, json.JSONDecodeError, KeyError):
+        return []
+
+
 class PaymentSaga:
     """Run payment_intent, outbox, and gateway.
 

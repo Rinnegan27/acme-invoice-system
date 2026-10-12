@@ -149,13 +149,22 @@ class SqliteInventoryRepository:
             rows = conn.execute("SELECT item, stock FROM inventory").fetchall()
             return {str(r["item"]): int(r["stock"]) for r in rows}
 
-    def check_availability(self, items: Sequence[LineItem]) -> list[str]:
+    def check_availability(
+        self,
+        items: Sequence[LineItem],
+        *,
+        prior_items: Sequence[LineItem] | None = None,
+    ) -> list[str]:
         """Return issue codes for inventory and master-data problems.
 
         Parameters
         ----------
         items : sequence of LineItem
             Lines to check. Quantities are summed by SKU.
+        prior_items : sequence of LineItem or None
+            Lines already drawn by a SUCCEEDED payment for the same
+            invoice_id. Stock checks use ``max(0, new_qty - prior_qty)``
+            so revisions and format twins are not double-counted.
 
         Returns
         -------
@@ -166,6 +175,7 @@ class SqliteInventoryRepository:
         -----
         Sum quantities by SKU so split lines cannot oversell stock.
         Soft price-band mismatches are soft findings (see PolicyEngine).
+        Price and PO checks still use the full new invoice quantities.
         """
         issues: list[str] = []
         qty_by_sku: dict[str, int] = {}
@@ -178,18 +188,26 @@ class SqliteInventoryRepository:
             if item.unit_price is not None:
                 priced[item.sku] = item.unit_price
 
+        prior_q: dict[str, int] = {}
+        for item in prior_items or ():
+            if item.quantity <= 0:
+                continue
+            prior_q[item.sku] = prior_q.get(item.sku, 0) + int(item.quantity)
+
         with connect(self.db_path) as conn:
             for sku, qty in qty_by_sku.items():
                 row = conn.execute(
                     "SELECT stock FROM inventory WHERE item = ?",
                     (sku,),
                 ).fetchone()
+                stock_needed = max(0, qty - prior_q.get(sku, 0))
                 if row is None:
                     issues.append(f"unknown_item:{sku}")
-                elif int(row["stock"]) == 0:
-                    issues.append(f"zero_stock:{sku}")
-                elif qty > int(row["stock"]):
-                    issues.append(f"insufficient_stock:{sku}")
+                elif stock_needed > 0:
+                    if int(row["stock"]) == 0:
+                        issues.append(f"zero_stock:{sku}")
+                    elif stock_needed > int(row["stock"]):
+                        issues.append(f"insufficient_stock:{sku}")
 
                 if sku in priced and priced[sku] >= 0:
                     if self.require_price_check:

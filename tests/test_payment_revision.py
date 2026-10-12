@@ -70,6 +70,53 @@ def test_1004_revision_updates_amount_and_stock_delta(tmp_path: Path) -> None:
     assert any(e["event_type"] == "PaymentRevised" for e in events)
 
 
+def test_qty_increase_revision_under_tight_stock(tmp_path: Path) -> None:
+    """WidgetA 3→4 only needs +1 on the shelf — validation must credit prior draw."""
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="case")
+    # Drain WidgetA to 1 left after a synthetic first pay of qty 3.
+    pipe.inventory.decrement_stock(
+        [
+            LineItem("WidgetA", 11, Decimal("250")),
+            LineItem("WidgetB", 2, Decimal("500")),
+        ]
+    )
+    # Seed payment_intent as if INV-QTY was already paid for WidgetA×3.
+    first = pipe.saga.pay(
+        invoice_id="INV-QTY",
+        vendor="Precision Parts Ltd.",
+        amount=Decimal("810"),
+        correlation_id="c-first",
+        items=(LineItem("WidgetA", 3, Decimal("250")),),
+    )
+    assert first.status == "success"
+    assert pipe.inventory.stock_levels()["WidgetA"] == 1  # 15-11-3
+
+    # Write a revised invoice file: same id, WidgetA 3→4.
+    rev = tmp_path / "inv_qty_rev.json"
+    rev.write_text(
+        json.dumps(
+            {
+                "invoice_number": "INV-QTY",
+                "vendor": {"name": "Precision Parts Ltd."},
+                "date": "2026-01-22",
+                "due_date": "2026-02-22",
+                "line_items": [
+                    {"item": "WidgetA", "quantity": 4, "unit_price": 250.00},
+                ],
+                "subtotal": 1000.00,
+                "tax_rate": 0.08,
+                "tax_amount": 80.00,
+                "total": 1080.00,
+                "currency": "USD",
+            }
+        ),
+        encoding="utf-8",
+    )
+    second = pipe.process_file(rev)
+    assert second.status == "paid"
+    assert pipe.inventory.stock_levels()["WidgetA"] == 0  # drew the +1 delta
+
+
 def test_saga_revision_delta_pay_unit(tmp_path: Path) -> None:
     inv = SqliteInventoryRepository(tmp_path / "inv.db")
     saga = PaymentSaga(
