@@ -95,7 +95,31 @@ class OfflineLLM:
                 ),
                 reflected=True,
             )
-        typo_reviews = [i for i in soft if not is_vendor_split_risk(i)]
+        variants = [i for i in soft if str(i).startswith("sku_variant_review")]
+        if variants:
+            return ApprovalDecision(
+                approved=False,
+                reason=(
+                    "Rejected: Vendor invoiced for unlisted SKU variant — "
+                    + "; ".join(variants)
+                ),
+                reflected=True,
+            )
+        typo_reviews = [
+            i
+            for i in soft
+            if not is_vendor_split_risk(i) and not str(i).startswith("sku_variant_review")
+        ]
+        ambiguous = [i for i in typo_reviews if "→ambiguous:" in str(i)]
+        if ambiguous:
+            return ApprovalDecision(
+                approved=False,
+                reason=(
+                    "VP rejected ambiguous SKU root (multiple catalog matches): "
+                    + "; ".join(ambiguous)
+                ),
+                reflected=True,
+            )
         if typo_reviews:
             # Stub VP: accept clear catalog typo mappings after reflection.
             return ApprovalDecision(

@@ -104,6 +104,8 @@ def _to_decimal(value: Any) -> Decimal:
     if value is None or value == "":
         raise ExtractionError("invalid_amount: missing numeric value")
     text = str(value).replace(",", "").replace("$", "").strip()
+    # Strip leading currency codes: "USD 250.00" / "USD$250".
+    text = re.sub(r"^(?:USD|EUR|GBP|CAD|AUD)\s*", "", text, flags=re.IGNORECASE).strip()
     if not text:
         raise ExtractionError("invalid_amount: empty numeric value")
     try:
@@ -117,6 +119,106 @@ def _optional_decimal(value: Any) -> Decimal | None:
     if value is None or value == "":
         return None
     return _to_decimal(value)
+
+
+# Generic English number words (0–99). Not a UAT-specific allowlist.
+_ONES: dict[str, int] = {
+    "zero": 0,
+    "oh": 0,
+    "o": 0,  # OCR lookalike for 0
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS: dict[str, int] = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+
+
+def _english_word_quantity(text: str) -> int | None:
+    """Parse a simple English quantity phrase (0–99). Return None if unknown."""
+    tokens = re.findall(r"[a-z]+", text.casefold())
+    if not tokens:
+        return None
+    if len(tokens) == 1:
+        w = tokens[0]
+        if w in _ONES:
+            return _ONES[w]
+        if w in _TENS:
+            return _TENS[w]
+        return None
+    if len(tokens) == 2 and tokens[0] in _TENS and tokens[1] in _ONES:
+        return _TENS[tokens[0]] + _ONES[tokens[1]]
+    return None
+
+
+def _to_quantity(value: Any) -> int:
+    """Parse a line quantity; reject fractions, percents, and approximations.
+
+    Notes
+    -----
+    Accepts integers, scientific notation, English words (0–99), OCR ``O``,
+    and leading digits with trailing unit noise (``3 units``, ``10 (Ten)``).
+    """
+    if value is None or value == "":
+        raise ExtractionError("invalid_quantity: missing value")
+    if isinstance(value, bool):
+        raise ExtractionError(f"invalid_quantity: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise ExtractionError(f"invalid_quantity:non_integer:{value}")
+        return int(value)
+    if isinstance(value, Decimal):
+        if value != value.to_integral_value():
+            raise ExtractionError(f"invalid_quantity:non_integer:{value}")
+        return int(value)
+
+    text = str(value).strip().strip("\"'")
+    if not text:
+        raise ExtractionError("invalid_quantity: empty value")
+    # Approximation / percent markers are never valid inventory quantities.
+    if "~" in text or "%" in text:
+        raise ExtractionError(f"invalid_quantity:symbol:{text}")
+    # Leading integer + optional bracketed/word unit noise.
+    m = re.match(r"^([+-]?\d+)\s*(?:[\(\[]?[A-Za-z]+[\)\]]?|[A-Za-z]+\.?)?\s*$", text)
+    if m and re.search(r"[A-Za-z]", text):
+        return int(m.group(1))
+    word_qty = _english_word_quantity(text)
+    if word_qty is not None:
+        return word_qty
+    cleaned = text.replace(",", "").strip()
+    try:
+        dec = Decimal(cleaned)
+    except (InvalidOperation, ValueError) as exc:
+        raise ExtractionError(f"invalid_quantity: {value!r}") from exc
+    if dec != dec.to_integral_value():
+        raise ExtractionError(f"invalid_quantity:non_integer:{value}")
+    return int(dec)
 
 
 def line_items_amount(items: Sequence[LineItem]) -> Decimal | None:
@@ -225,7 +327,7 @@ def _from_json(raw: str, source_path: str) -> Invoice:
     items: list[LineItem] = []
     for item in data.get("line_items") or data.get("items") or []:
         sku = str(item.get("item") or item.get("sku") or item.get("name") or "UNKNOWN")
-        qty = int(item.get("quantity") or item.get("qty") or 0)
+        qty = _to_quantity(item.get("quantity") if item.get("quantity") is not None else item.get("qty") or 0)
         price = _optional_decimal(
             item.get("unit_price") if item.get("unit_price") is not None else item.get("price")
         )
@@ -272,7 +374,7 @@ def _from_csv(raw: str, source_path: str) -> Invoice:
                     items.append(
                         LineItem(
                             sku=pending_item["item"],
-                            quantity=int(pending_item.get("quantity") or 0),
+                            quantity=_to_quantity(pending_item.get("quantity") or 0),
                             unit_price=_optional_decimal(pending_item.get("unit_price")),
                         )
                     )
@@ -287,7 +389,7 @@ def _from_csv(raw: str, source_path: str) -> Invoice:
             items.append(
                 LineItem(
                     sku=pending_item["item"],
-                    quantity=int(pending_item.get("quantity") or 0),
+                    quantity=_to_quantity(pending_item.get("quantity") or 0),
                     unit_price=_optional_decimal(pending_item.get("unit_price")),
                 )
             )
@@ -346,7 +448,11 @@ def _from_tabular_csv(raw: str, source_path: str, header: list[str]) -> Invoice:
         item_name = row[item_idx].strip() if item_idx < len(row) else ""
         if not item_name:
             continue
-        qty = int(float(row[qty_idx])) if qty_idx < len(row) and row[qty_idx].strip() else 0
+        qty = (
+            _to_quantity(row[qty_idx])
+            if qty_idx < len(row) and row[qty_idx].strip()
+            else 0
+        )
         price = (
             _optional_decimal(row[price_idx]) if price_idx >= 0 and price_idx < len(row) else None
         )
@@ -385,7 +491,7 @@ def _from_csv_wide_fallback(lines: list[str], header: list[str], source_path: st
     items = (
         LineItem(
             sku=col("item") or col("sku") or "UNKNOWN",
-            quantity=int(col("quantity") or col("qty") or "0"),
+            quantity=_to_quantity(col("quantity") or col("qty") or "0"),
             unit_price=_optional_decimal(col("unit_price") or col("price") or None),
         ),
     )
@@ -436,7 +542,7 @@ def _from_xml(raw: str, source_path: str) -> Invoice:
             if tag in {"name", "sku", "item"}:
                 name = (child.text or "").strip()
             elif tag == "quantity":
-                qty = int((child.text or "0").strip())
+                qty = _to_quantity((child.text or "0").strip())
             elif tag in {"unit_price", "price"}:
                 price = _optional_decimal(child.text)
         if name:
@@ -538,23 +644,39 @@ def _from_text(raw: str, source_path: str) -> Invoice:
     )
     due_date = _parse_date(_find(r"(?:Due\s*Date|Due\s*Dt|Due)\s*[:]\s*(.+)", raw))
 
+    # Approximate / percent / fractional quantities are data-integrity failures.
+    if re.search(r"(?i)Qty\s*[:\s]+~", raw) or re.search(
+        r"(?i)Qty\s*[:\s]+[\d,]+\.\d+", raw
+    ) or re.search(r"(?i)Qty\s*[:\s]+[\d,]+%", raw):
+        raise ExtractionError("invalid_quantity:symbol_or_fraction")
+
     items: list[LineItem] = []
     patterns = [
         # Do not treat the letter in "Gadget X" as a qty marker; only bare "x5".
-        r"(?m)^\s*-?\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(?:qty[:\s]+|x(?=\d))?(\d+)\s*(?:@|x)?\s*\$?([\d,.]+)?",
-        r"(?m)^\s*([A-Za-z][A-Za-z0-9_\-]*)\s+(\d+)\s+\$([\d,.]+)\s+\$([\d,.]+)",
-        r"Item[:\s]+([A-Za-z0-9_\-]+).*?Qty[:\s]+(\d+)",
+        # Optional trailing "(rush order)" annotations are stripped by LineItem.
+        r"(?m)^\s*-?\s*([A-Za-z][A-Za-z0-9_\-]*(?:\s*\([^)\n]*\))?)\s+(?:qty[:\s]+|x(?=\d))?(\d+)\s*(?:@|x)?\s*\$?([\d,.]+)?",
+        r"(?m)^\s*([A-Za-z][A-Za-z0-9_\-]*(?:\s*\([^)\n]*\))?)\s+(\d+)\s+\$([\d,.]+)\s+\$([\d,.]+)",
         r"([A-Za-z][A-Za-z0-9_\-]*)\s+x(\d+)\s+\$?([\d,.]+)",
     ]
     seen: set[tuple[str, int]] = set()
+    # Item/Qty may sit on adjacent lines; other patterns stay single-line.
+    item_qty_pat = (
+        r"Item[:\s]+([A-Za-z0-9_\-]+(?:[ \t]+[A-Za-z0-9_\-]+)?)"
+        r"[ \t]*(?:\n[ \t]*)?Qty[:\s]+([^\n]+)"
+    )
     for pat in patterns:
-        for m in re.finditer(pat, raw, re.IGNORECASE):
+        flags = re.IGNORECASE
+        for m in re.finditer(pat, raw, flags):
             sku = m.group(1).strip()
             if sku.lower() in _SKU_DENYLIST:
                 continue
-            if len(sku) < 3:
+            # Keep short aliases like W-A; drop single-letter noise.
+            compact_sku_len = len(re.sub(r"[\s_-]+", "", sku))
+            if compact_sku_len < 2:
                 continue
-            qty = int(m.group(2))
+            if "\n" in sku or "qty" in sku.casefold():
+                continue
+            qty = _to_quantity(m.group(2).strip().strip("\"'"))
             price = (
                 _optional_decimal(m.group(3))
                 if m.lastindex and m.lastindex >= 3 and m.group(3)
@@ -566,29 +688,45 @@ def _from_text(raw: str, source_path: str) -> Invoice:
             seen.add(key)
             items.append(LineItem(sku=sku, quantity=qty, unit_price=price))
 
-    # Galatiq style: WidgetA    qty: 10
+    for m in re.finditer(item_qty_pat, raw, re.IGNORECASE):
+        sku = m.group(1).strip()
+        if sku.lower() in _SKU_DENYLIST or "\n" in sku:
+            continue
+        qty = _to_quantity(m.group(2).strip().strip("\"'"))
+        key = (sku, qty)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(LineItem(sku=sku, quantity=qty))
+
+    # Galatiq style: WidgetA    qty: 10  (also word/OCR quantities).
+    # Use [ \\t]+ so "Widget A\\nQty:" does not create a phantom SKU "A".
     for m in re.finditer(
-        r"([A-Za-z][A-Za-z0-9_\-]*)\s+qty[:\s]+(\d+)",
+        r"([A-Za-z][A-Za-z0-9_\-]*)[ \t]+qty[:\s]+([^\n]+)",
         raw,
         re.IGNORECASE,
     ):
         sku = m.group(1)
         if sku.lower() in _SKU_DENYLIST:
             continue
-        qty = int(m.group(2))
+        qty_token = m.group(2).strip().split()[0].strip("\"'")
+        # Skip unit-price lines mistaken as qty.
+        if qty_token.lower().startswith("unit") or qty_token.startswith("$"):
+            continue
+        qty = _to_quantity(qty_token)
         key = (sku, qty)
         if key not in seen:
             seen.add(key)
             items.append(LineItem(sku=sku, quantity=qty))
 
-    # Spaced SKUs: "Widget A", "Gadget X"
+    # Spaced SKUs: "Widget A", "Gadget X", "Widgiet B"
     for m in re.finditer(
-        r"(Widget|Gadget)\s+([A-Za-z0-9]+)\s+(\d+)",
+        r"(Widget|Gadget|Widgiet|Widg)\s+([A-Za-z0-9]+)\s+(\d+)",
         raw,
         re.IGNORECASE,
     ):
-        sku = f"{m.group(1)}{m.group(2)}"
-        qty = int(m.group(3))
+        sku = f"{m.group(1)} {m.group(2)}"
+        qty = _to_quantity(m.group(3))
         key = (sku, qty)
         if key not in seen:
             seen.add(key)
@@ -607,7 +745,7 @@ def _from_text(raw: str, source_path: str) -> Invoice:
         ):
             m = re.search(rf"{sku}\D+(\d+)", raw, re.IGNORECASE)
             if m:
-                items.append(LineItem(sku=sku, quantity=int(m.group(1))))
+                items.append(LineItem(sku=sku, quantity=_to_quantity(m.group(1))))
 
     if not items:
         raise ExtractionError("could not extract line items from text")

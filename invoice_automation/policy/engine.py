@@ -48,6 +48,7 @@ SOFT_PREFIXES: tuple[str, ...] = (
     "po_qty_exceeded",
     "sku_typo_review",
     "vendor_split_risk",
+    "sku_variant_review",
 )
 
 _PLACEHOLDER_SECRETS = frozenset(

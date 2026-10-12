@@ -41,21 +41,15 @@ def test_partition_sku_typo_issues() -> None:
     assert typo == ["sku_typo_review:Widget A→WidgetA"]
 
 
-def test_stub_pipeline_1012_goes_through_vp_reflection(tmp_path: Path) -> None:
+def test_stub_pipeline_1012_silent_space_normalize_pays(tmp_path: Path) -> None:
+    """Spaced catalog labels (Widget A) auto-normalize; under-$10k pays without VP."""
     pipe = Pipeline(work_dir=tmp_path / "r", use_grok=False, profile="case")
     result = pipe.process_file(DATA / "invoice_1012.txt")
     assert result.status == "paid"
     events = [e for e in pipe.events.read_all() if e.get("invoice_id") == "INV-1012"]
     validated = next(e for e in events if e["event_type"] == "InvoiceValidated")
-    soft = (
-        validated["payload"].get("soft_escalations")
-        or validated["payload"].get("sku_typo_reviews")
-        or validated["payload"].get("invoice", {}).get("issues")
-        or []
-    )
-    assert any(str(i).startswith("sku_typo_review") for i in soft)
-    approved = next(e for e in events if e["event_type"] == "InvoiceApproved")
-    assert approved["payload"].get("reflected") is True
-    assert "typo" in str(approved["payload"].get("reason", "")).lower() or approved["payload"].get(
-        "reflected"
-    )
+    soft = validated["payload"].get("soft_escalations") or []
+    assert not any(str(i).startswith("sku_typo_review") for i in soft)
+    items = validated["payload"]["invoice"]["items"]
+    skus = {i["sku"] for i in items}
+    assert "WidgetA" in skus and "GadgetX" in skus

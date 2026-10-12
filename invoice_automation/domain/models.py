@@ -170,8 +170,8 @@ class Invoice:
 
     @property
     def is_high_value(self) -> bool:
-        """Return True when amount exceeds the VP scrutiny threshold."""
-        return self.amount > HIGH_VALUE_THRESHOLD
+        """Return True when amount meets or exceeds the VP scrutiny threshold."""
+        return self.amount >= HIGH_VALUE_THRESHOLD
 
 
 @dataclass(frozen=True)

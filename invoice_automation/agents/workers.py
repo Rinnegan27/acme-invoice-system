@@ -91,13 +91,19 @@ class IngestionWorker:
         try:
             raw = _read_source(path)
             result = self.llm.extract(raw, path)
-            from invoice_automation.policy.invariants import detect_sku_typo_reviews
+            from invoice_automation.policy.sku_resolve import (
+                resolve_line_items,
+                undo_abbreviation_expansions,
+            )
 
-            typo_issues = detect_sku_typo_reviews(raw, result.invoice.items)
+            # Undo LLM over-expansion of short abbreviations (W-A ≠ WidgetA).
+            items = undo_abbreviation_expansions(raw, result.invoice.items)
+            resolved_items, resolve_soft = resolve_line_items(items)
             invoice = result.invoice.with_updates(
                 correlation_id=correlation_id,
                 source_path=str(path),
-                issues=tuple(typo_issues) if typo_issues else result.invoice.issues,
+                items=resolved_items,
+                issues=tuple(resolve_soft) if resolve_soft else result.invoice.issues,
             )
             self.events.emit(
                 "InvoiceExtracted",

@@ -7,6 +7,32 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-12
+
+### Added
+
+- Generic ``CatalogResolver`` (``policy/sku_resolve.py``): confidence-tier
+  matching against the live catalog (exact / unique_close / ambiguous /
+  variant / none) — no product-specific alias tables. Short abbreviations
+  (compact length ≤ 3) are never auto-mapped to catalog codes; LLM
+  over-expansions are undone from the source ``Item:`` text. Soft
+  escalations feed VP; live Grok extract/approve prompts carry catalog
+  intelligence for the same policy.
+- Generic quantity coercion in parsers: English numbers 0–99, scientific
+  notation, unit-noise strip; reject fractions, ``~``, and ``%``.
+- Inflated-total guard: priced lines vs total beyond ~15% →
+  ``amount_line_mismatch`` (UAT ghost-phantom total).
+- Offline UAT harness: ``tests/test_uat_scenarios.py`` covers
+  ``docs/uat_test_cases.md``. Live runner: ``scripts/run_uat_live_grok.py``.
+
+### Changed
+
+- Spaced catalog labels (``Widget A``) auto-normalize without VP when the
+  compact form matches exactly (UAT TC-NAME-01 / INV-1012).
+- High-value VP threshold is inclusive (``amount >= 10000``).
+- Grok extract prompt ``extract-v5``: do not expand short abbreviations
+  into catalog SKUs.
+
 ## [1.6.0] — 2026-10-12
 
 ### Added

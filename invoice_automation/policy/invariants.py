@@ -42,6 +42,7 @@ VENDOR_SPLIT_RISK_PREFIX = "vendor_split_risk"
 SOFT_ESCALATION_PREFIXES: tuple[str, ...] = (
     SKU_TYPO_REVIEW_PREFIX,
     VENDOR_SPLIT_RISK_PREFIX,
+    "sku_variant_review",
 )
 
 
@@ -148,8 +149,13 @@ def collect_invariant_issues(invoice: Invoice) -> list[str]:
 
     if priced and invoice.items and invoice.amount >= 0:
         # Line sum above total fails integrity.
-        # Total above lines is allowed for tax, shipping, or fees.
         if line_total > invoice.amount + Decimal("0.05"):
+            issues.append("amount_line_mismatch")
+        # Total far above priced lines (beyond normal tax/fees ~15%) is fraud.
+        elif (
+            line_total > 0
+            and invoice.amount > line_total * Decimal("1.15") + Decimal("1.00")
+        ):
             issues.append("amount_line_mismatch")
 
     return issues

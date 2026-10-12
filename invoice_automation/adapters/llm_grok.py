@@ -74,17 +74,33 @@ class _ApproveModel(BaseModel):
 
 
 # Pinned prompt versions for eval / change control (bump when text changes).
-EXTRACT_PROMPT_VERSION = "extract-v3"
-APPROVE_PROMPT_VERSION = "approve-v4"
+EXTRACT_PROMPT_VERSION = "extract-v5"
+APPROVE_PROMPT_VERSION = "approve-v5"
 
 EXTRACT_SYSTEM = """You extract structured invoice data for Acme Corp.
 Return ONLY valid JSON with keys:
 invoice_id (string), vendor (string), amount (number or null), due_date (YYYY-MM-DD or null),
 items (array of {sku, quantity, unit_price}), notes (string).
 Prefer invoice_id in the form INV-1001 (include the INV- prefix).
-Do not invent SKUs that are not present. Quantity must be an integer.
-SKU must be the catalog code only (e.g. WidgetA). Put rush/expedite notes
-in notes, not in sku — never return "WidgetA (rush order)" as sku.
+
+Catalog SKU intelligence (user message lists the live catalog):
+- Map item names to a catalog code when the match is unambiguous
+  (spacing, case, underscores, hyphens, minor typos, phonetic variants).
+- If several catalog codes are equally plausible, keep the raw sku and
+  mention sku_ambiguous in notes — do not guess.
+- If the raw name is a catalog code plus an unlisted suffix/variant,
+  map to the base catalog code and mention sku_variant in notes.
+- Never expand short abbreviations or initials (about 1–3 letters, with or
+  without hyphens) into catalog codes. Keep the abbreviation as sku unchanged
+  (e.g. do not turn W-A into WidgetA). Mention abbreviation in notes.
+- Never invent SKUs that are neither on the document nor in the catalog.
+- Put rush/expedite notes in notes, not in sku.
+
+Quantity must be an integer. Coerce words, scientific notation, and unit
+noise (e.g. "3 units") to integers. Do not invent fractional stock qty;
+if quantity is approximate (~) or non-integer, say so in notes and omit
+that line or fail closed.
+
 If TOTAL / amount due is missing, set amount to null and always fill unit_price
 on every line so the system can compute the total. Prefer TOTAL when present;
 otherwise prefer SUBTOTAL. Mention missing totals in notes.
@@ -94,10 +110,10 @@ APPROVE_SYSTEM = """You are a VP reviewing invoices for Acme Corp.
 Return ONLY JSON: {"approved": bool, "reason": string, "reflected": true}.
 Rules:
 - Hard validation issues (not soft escalations) → reject.
-- If sku_typo_reviews is non-empty, the extractor mapped spaced labels
-  (e.g. "Widget A") to catalog SKUs (WidgetA). Decide whether that typo
-  correction is acceptable. Approve only when the mapping is clearly safe;
-  otherwise reject and explain.
+- Soft escalations in issues / sku_typo_reviews:
+  - Clear unique typo/normalization maps → approve when safe.
+  - Ambiguous roots (multiple catalog candidates) → reject.
+  - Unlisted SKU variants (sku_variant_review) → reject.
 - If vendor_split_risks is non-empty, multiple under-threshold invoices from
   the same vendor recently cumulate above the high-value bar. Treat as
   suspected structuring / split-invoice compliance risk. Prefer reject or
@@ -235,6 +251,15 @@ class GrokLLM:
         self.extract_prompt_version = EXTRACT_PROMPT_VERSION
         self.approve_prompt_version = APPROVE_PROMPT_VERSION
         self.last_approve_audit: dict[str, Any] | None = None
+        # Live catalog for extract intelligence (override via GALATIQ_CATALOG).
+        from invoice_automation.policy.sku_resolve import DEFAULT_CATALOG
+
+        env_cat = os.getenv("GALATIQ_CATALOG", "").strip()
+        self.catalog: tuple[str, ...] = (
+            tuple(s.strip() for s in env_cat.split(",") if s.strip())
+            if env_cat
+            else DEFAULT_CATALOG
+        )
         if not is_live_xai_key(self.api_key):
             raise RuntimeError(
                 "XAI_API_KEY is required for GrokLLM "
@@ -369,9 +394,11 @@ class GrokLLM:
         last_error = ""
         for attempt in range(3):
             critique = f"\nPrevious error: {last_error}" if last_error else ""
+            catalog_csv = ", ".join(self.catalog)
             user = (
                 f"Source: {source_path}\n"
                 f"Attempt: {attempt + 1}\n"
+                f"Known inventory catalog SKUs: {catalog_csv}\n"
                 f"Invoice document:\n```\n{raw_text[:12000]}\n```"
                 f"{critique}"
             )
@@ -449,6 +476,7 @@ class GrokLLM:
         self.last_approve_audit = None
         other_issues, soft = partition_soft_escalation_issues(invoice.issues)
         typo_reviews = [i for i in soft if is_sku_typo_review(i)]
+        variant_reviews = [i for i in soft if str(i).startswith("sku_variant_review")]
         split_risks = [i for i in soft if is_vendor_split_risk(i)]
         # Guardrail 1: hard validation findings win.
         if other_issues:
@@ -490,7 +518,9 @@ class GrokLLM:
             "issues": list(invoice.issues),
             "high_value": invoice.is_high_value,
             "sku_typo_reviews": typo_reviews,
+            "sku_variant_reviews": variant_reviews,
             "vendor_split_risks": split_risks,
+            "catalog": list(self.catalog),
         }
         user_prompt = json.dumps(payload)
         data = self._chat_json(
