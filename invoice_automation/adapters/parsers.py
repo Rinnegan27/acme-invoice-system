@@ -327,7 +327,9 @@ def _from_json(raw: str, source_path: str) -> Invoice:
     items: list[LineItem] = []
     for item in data.get("line_items") or data.get("items") or []:
         sku = str(item.get("item") or item.get("sku") or item.get("name") or "UNKNOWN")
-        qty = _to_quantity(item.get("quantity") if item.get("quantity") is not None else item.get("qty") or 0)
+        qty = _to_quantity(
+            item.get("quantity") if item.get("quantity") is not None else item.get("qty") or 0
+        )
         price = _optional_decimal(
             item.get("unit_price") if item.get("unit_price") is not None else item.get("price")
         )
@@ -448,11 +450,7 @@ def _from_tabular_csv(raw: str, source_path: str, header: list[str]) -> Invoice:
         item_name = row[item_idx].strip() if item_idx < len(row) else ""
         if not item_name:
             continue
-        qty = (
-            _to_quantity(row[qty_idx])
-            if qty_idx < len(row) and row[qty_idx].strip()
-            else 0
-        )
+        qty = _to_quantity(row[qty_idx]) if qty_idx < len(row) and row[qty_idx].strip() else 0
         price = (
             _optional_decimal(row[price_idx]) if price_idx >= 0 and price_idx < len(row) else None
         )
@@ -645,9 +643,11 @@ def _from_text(raw: str, source_path: str) -> Invoice:
     due_date = _parse_date(_find(r"(?:Due\s*Date|Due\s*Dt|Due)\s*[:]\s*(.+)", raw))
 
     # Approximate / percent / fractional quantities are data-integrity failures.
-    if re.search(r"(?i)Qty\s*[:\s]+~", raw) or re.search(
-        r"(?i)Qty\s*[:\s]+[\d,]+\.\d+", raw
-    ) or re.search(r"(?i)Qty\s*[:\s]+[\d,]+%", raw):
+    if (
+        re.search(r"(?i)Qty\s*[:\s]+~", raw)
+        or re.search(r"(?i)Qty\s*[:\s]+[\d,]+\.\d+", raw)
+        or re.search(r"(?i)Qty\s*[:\s]+[\d,]+%", raw)
+    ):
         raise ExtractionError("invalid_quantity:symbol_or_fraction")
 
     items: list[LineItem] = []

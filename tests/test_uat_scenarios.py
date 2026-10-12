@@ -517,9 +517,7 @@ def test_uat_compound_4_5_microcurrency_vp(tmp_path: Path) -> None:
         Total: $10000.00
         """,
     )
-    pipe = Pipeline(
-        work_dir=pipe_dir, use_grok=False, profile="case", soft_price_bands=False
-    )
+    pipe = Pipeline(work_dir=pipe_dir, use_grok=False, profile="case", soft_price_bands=False)
     result = pipe.process_file(path)
     assert result.status == "paid", f"issues={result.issues} reason={result.approval_reason}"
     events = [e for e in pipe.events.read_all() if e.get("invoice_id") == "INV-9405"]

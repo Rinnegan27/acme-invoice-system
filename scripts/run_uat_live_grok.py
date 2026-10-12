@@ -25,215 +25,349 @@ from invoice_automation.orchestration.pipeline import Pipeline  # noqa: E402
 OUT = ROOT / "docs" / "uat_live_grok_results.jsonl"
 
 CASES: list[tuple[str, str, str, str]] = [
-    ("TC-NAME-01", "PASS (Auto-Fix)", "paid", """
+    (
+        "TC-NAME-01",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9101
 Vendor: Delta Corp
 Item: Widget A
 Qty: 5
 Unit Price: $250
 Total: $1250
-"""),
-    ("TC-NAME-02", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-NAME-02",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9102
 Vendor: SupplyCo
 Item: Widg3tA
 Qty: 3
 Unit Price: $250
 Total: $750
-"""),
-    ("TC-NAME-03", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-NAME-03",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9103
 Vendor: Acme Partner
 Item: WidgetC
 Qty: 2
 Unit Price: $250
 Total: $500
-"""),
-    ("TC-NAME-04", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NAME-04",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9104
 Vendor: CaseCo
 Item: widget_a
 Qty: 5
 Unit Price: $250
 Total: $1250
-"""),
-    ("TC-NAME-05", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NAME-05",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9105
 Vendor: FatFinger LLC
 Item: Widgiet B
 Qty: 2
 Unit Price: $500
 Total: $1000
-"""),
-    ("TC-NAME-06", "FLAG (abbrev ≠ catalog)", "flag", """
+""",
+    ),
+    (
+        "TC-NAME-06",
+        "FLAG (abbrev ≠ catalog)",
+        "flag",
+        """
 Invoice Number: INV-9106
 Vendor: Abbrev Co
 Item: W-A
 Qty: 10
 Unit Price: $250
 Total: $2500
-"""),
-    ("TC-NAME-07", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NAME-07",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9107
 Vendor: Truncate Inc
 Item: WidgA
 Qty: 2
 Unit Price: $250
 Total: $500
-"""),
-    ("TC-NAME-08", "VP REVIEW ESCALATION", "vp", """
+""",
+    ),
+    (
+        "TC-NAME-08",
+        "VP REVIEW ESCALATION",
+        "vp",
+        """
 Invoice Number: INV-9108
 Vendor: Alias Traders
 Item: Widget Alpha
 Qty: 1
 Unit Price: $250
 Total: $250
-"""),
-    ("TC-NAME-09", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NAME-09",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9109
 Vendor: Noise Co
 Item: W_i_d_g_e_t_A
 Qty: 2
 Unit Price: $250
 Total: $500
-"""),
-    ("TC-NAME-10", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NAME-10",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9110
 Vendor: Phonetic Co
 Item: Gadget Ex
 Qty: 1
 Unit Price: $100
 Total: $100
-"""),
-    ("TC-NAME-11", "VP REVIEW ESCALATION", "vp_stop", """
+""",
+    ),
+    (
+        "TC-NAME-11",
+        "VP REVIEW ESCALATION",
+        "vp_stop",
+        """
 Invoice Number: INV-9111
 Vendor: Root Ambiguity Co
 Item: Widget
 Qty: 5
 Unit Price: $250
 Total: $1250
-"""),
-    ("TC-NUM-01", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-NUM-01",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9201
 Vendor: Global Logistics
 Item: WidgetB
 Qty: 5.5
 Unit Price: $500
 Total: $2750
-"""),
-    ("TC-NUM-02", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NUM-02",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9202
 Vendor: Text Corp
 Item: WidgetA
 Qty: "Five"
 Unit Price: $250
 Total: $1250
-"""),
-    ("TC-NUM-03", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-NUM-03",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9203
 Vendor: Rogue Inc
 Item: WidgetA
 Qty: -10
 Unit Price: $250
 Total: $2500
-"""),
-    ("TC-NUM-04", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NUM-04",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9204
 Vendor: Redundant Co
 Item: WidgetA
 Qty: 10 (Ten)
 Unit Price: $250
 Total: $2500
-"""),
-    ("TC-NUM-05", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-NUM-05",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9205
 Vendor: Approx Co
 Item: WidgetA
 Qty: ~5
 Unit Price: $250
 Total: $1250
-"""),
-    ("TC-NUM-06", "PASS then zero-qty block", "flag", """
+""",
+    ),
+    (
+        "TC-NUM-06",
+        "PASS then zero-qty block",
+        "flag",
+        """
 Invoice Number: INV-9206
 Vendor: OCR Co
 Item: WidgetA
 Qty: O
 Unit Price: $250
 Total: $0
-"""),
-    ("TC-NUM-07", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-NUM-07",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9207
 Vendor: Percent Co
 Item: WidgetA
 Qty: 1,000%
 Unit Price: $250
 Total: $100
-"""),
-    ("TC-NUM-08", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NUM-08",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9208
 Vendor: Pad Co
 Item: WidgetA
 Qty: 00005
 Unit Price: $250
 Total: $1250
-"""),
-    ("TC-NUM-09", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NUM-09",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9209
 Vendor: SciNote Co
 Item: WidgetB
 Qty: 1e1
 Unit Price: $500
 Total: $5000
-"""),
-    ("TC-NUM-10", "PASS (Auto-Fix)", "paid", """
+""",
+    ),
+    (
+        "TC-NUM-10",
+        "PASS (Auto-Fix)",
+        "paid",
+        """
 Invoice Number: INV-9210
 Vendor: UnitNoise Co
 Item: WidgetA
 Qty: 3 units
 Unit Price: USD $250.00
 Total: $750
-"""),
-    ("TC-STOCK-01", "PASS", "paid", """
+""",
+    ),
+    (
+        "TC-STOCK-01",
+        "PASS",
+        "paid",
+        """
 Invoice Number: INV-9301
 Vendor: Manufacturing Ltd
 Item: GadgetX
 Qty: 5
 Unit Price: $100
 Total: $500
-"""),
-    ("TC-STOCK-02", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-STOCK-02",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9302
 Vendor: Nexus Trading
 Item: GadgetX
 Qty: 6
 Unit Price: $100
 Total: $600
-"""),
-    ("TC-STOCK-03", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-STOCK-03",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9303
 Vendor: Shadow Supply
 Item: FakeItem
 Qty: 1
 Unit Price: $1
 Total: $1
-"""),
-    ("TC-STOCK-04", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-STOCK-04",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9304
 Vendor: ZeroQty Co
 Item: GadgetX
 Qty: 0
 Unit Price: $100
 Total: $100
-"""),
-    ("TC-STOCK-05", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-STOCK-05",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9305
 Vendor: OffByOne Co
 Item: WidgetA
 Qty: 16
 Unit Price: $250
 Total: $4000
-"""),
-    ("TC-STOCK-06", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-STOCK-06",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9306
 Vendor: SplitRows Co
 Item: WidgetB
@@ -243,56 +377,91 @@ Item: WidgetB
 Qty: 10
 Unit Price: $500
 Total: $5500
-"""),
-    ("TC-STOCK-07", "PASS", "paid", """
+""",
+    ),
+    (
+        "TC-STOCK-07",
+        "PASS",
+        "paid",
+        """
 Invoice Number: INV-9307
 Vendor: Ceiling Co
 Item: widgeta
 Qty: 15
 Unit Price: $250
 Total: $3750
-"""),
-    ("TC-STOCK-08", "PASS", "paid", """
+""",
+    ),
+    (
+        "TC-STOCK-08",
+        "PASS",
+        "paid",
+        """
 Invoice Number: INV-9308
 Vendor: Deplete Co
 Item: WidgetB
 Qty: 10
 Unit Price: $500
 Total: $5000
-"""),
-    ("TC-STOCK-09", "FLAG", "flag", """
+""",
+    ),
+    (
+        "TC-STOCK-09",
+        "FLAG",
+        "flag",
+        """
 Invoice Number: INV-9309
 Vendor: MicroFloat Co
 Item: GadgetX
 Qty: 5.0000001
 Unit Price: $100
 Total: $500
-"""),
-    ("TC-COMP-4.1", "FLAG fail-fast before VP", "flag_no_vp", """
+""",
+    ),
+    (
+        "TC-COMP-4.1",
+        "FLAG fail-fast before VP",
+        "flag_no_vp",
+        """
 Invoice Number: INV-9401
 Vendor: Maxi-Corp
 Item: WidgetB
 Qty: 25
 Unit Price: $500
 Total: $12500
-"""),
-    ("TC-COMP-4.2", "FLAG math before VP", "flag_no_vp", """
+""",
+    ),
+    (
+        "TC-COMP-4.2",
+        "FLAG math before VP",
+        "flag_no_vp",
+        """
 Invoice Number: INV-9402
 Vendor: Alpha Inc
 Item: WidgetA
 Qty: 10
 Unit Price: $100
 Total: $11000
-"""),
-    ("TC-COMP-4.3", "FLAG/VP reject variant", "flag", """
+""",
+    ),
+    (
+        "TC-COMP-4.3",
+        "FLAG/VP reject variant",
+        "flag",
+        """
 Invoice Number: INV-9403
 Vendor: Premium Vendors
 Item: WidgetA-Premium
 Qty: 2
 Unit Price: $4000
 Total: $8000
-"""),
-    ("TC-COMP-4.4", "FLAG atomic overstock", "flag", """
+""",
+    ),
+    (
+        "TC-COMP-4.4",
+        "FLAG atomic overstock",
+        "flag",
+        """
 Invoice Number: INV-9404
 Vendor: MultiLine Co
 Item: WidgetA
@@ -305,23 +474,34 @@ Item: GadgetX
 Qty: 1
 Unit Price: $100
 Total: $9850
-"""),
-    ("TC-COMP-4.5", "PASS via VP", "paid_vp", """
+""",
+    ),
+    (
+        "TC-COMP-4.5",
+        "PASS via VP",
+        "paid_vp",
+        """
 Invoice Number: INV-9405
 Vendor: RoundVault LLC
 Item: GadgetX
 Qty: 3
 Unit Price: $3333.3333
 Total: $10000.00
-"""),
-    ("TC-COMP-4.6", "PASS injection safe", "paid", """
+""",
+    ),
+    (
+        "TC-COMP-4.6",
+        "PASS injection safe",
+        "paid",
+        """
 Invoice Number: INV-9406
 Vendor: '; DROP TABLE inventory; --
 Item: WidgetA
 Qty: 1
 Unit Price: $250
 Total: $250
-"""),
+""",
+    ),
 ]
 
 

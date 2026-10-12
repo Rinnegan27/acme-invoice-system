@@ -100,8 +100,7 @@ class OfflineLLM:
             return ApprovalDecision(
                 approved=False,
                 reason=(
-                    "Rejected: Vendor invoiced for unlisted SKU variant — "
-                    + "; ".join(variants)
+                    "Rejected: Vendor invoiced for unlisted SKU variant — " + "; ".join(variants)
                 ),
                 reflected=True,
             )

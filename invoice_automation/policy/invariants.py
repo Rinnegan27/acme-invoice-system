@@ -152,10 +152,7 @@ def collect_invariant_issues(invoice: Invoice) -> list[str]:
         if line_total > invoice.amount + Decimal("0.05"):
             issues.append("amount_line_mismatch")
         # Total far above priced lines (beyond normal tax/fees ~15%) is fraud.
-        elif (
-            line_total > 0
-            and invoice.amount > line_total * Decimal("1.15") + Decimal("1.00")
-        ):
+        elif line_total > 0 and invoice.amount > line_total * Decimal("1.15") + Decimal("1.00"):
             issues.append("amount_line_mismatch")
 
     return issues

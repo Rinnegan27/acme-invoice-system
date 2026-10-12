@@ -309,9 +309,7 @@ def undo_abbreviation_expansions(
                     used.add(sc)
                     break
         if restored is not None:
-            out.append(
-                LineItem(sku=restored, quantity=item.quantity, unit_price=item.unit_price)
-            )
+            out.append(LineItem(sku=restored, quantity=item.quantity, unit_price=item.unit_price))
         else:
             out.append(item)
     return tuple(out)
@@ -355,9 +353,7 @@ def resolve_line_items(
     for item in items:
         match = resolver.resolve(item.sku)
         issue = resolver.soft_issue(item.sku, match)
-        out.append(
-            LineItem(sku=match.resolved, quantity=item.quantity, unit_price=item.unit_price)
-        )
+        out.append(LineItem(sku=match.resolved, quantity=item.quantity, unit_price=item.unit_price))
         if issue and issue not in seen:
             seen.add(issue)
             soft.append(issue)
