@@ -129,6 +129,8 @@ class Pipeline:
         Override PO coverage. None uses the profile.
     soft_price_bands : bool or None
         Override soft price bands. None uses the profile.
+    human_gate : callable or None
+        Optional approve/reject/escalate callback for VP-required invoices.
     """
 
     def __init__(
@@ -143,6 +145,7 @@ class Pipeline:
         require_price_check: bool | None = None,
         require_po: bool | None = None,
         soft_price_bands: bool | None = None,
+        human_gate: Any | None = None,
     ) -> None:
         from invoice_automation.runtime_profile import resolve_master_data
 
@@ -185,7 +188,13 @@ class Pipeline:
             self.metrics,
             system_db_path=db_path,
         )
-        self.approval = ApprovalWorker(self.queue, self.llm, self.events, self.metrics)
+        self.approval = ApprovalWorker(
+            self.queue,
+            self.llm,
+            self.events,
+            self.metrics,
+            human_gate=human_gate,
+        )
         self.payment = PaymentWorker(self.queue, self.saga, self.events, self.metrics)
         self.last_drain_state: Any = None
 
@@ -201,7 +210,7 @@ class Pipeline:
                     '(case brief uses api_key="your_key"). '
                     "Copy .env.example → .env and set a real key, or use --llm=stub."
                 )
-            return GrokLLM(api_key=key, metrics=self.metrics)
+            return GrokLLM(api_key=key, metrics=self.metrics, profile=self.profile)
         return OfflineLLM()
 
     def enqueue_file(self, path: str | Path) -> str:

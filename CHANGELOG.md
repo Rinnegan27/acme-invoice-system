@@ -7,6 +7,28 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-12
+
+### Added
+
+- CLI human-in-the-loop for VP scrutiny: interactive ``a`` / ``r`` / ``e``
+  (approve / reject / escalate-to-VP-agent). Default on TTY; ``--auto-vp`` /
+  ``GALATIQ_CLI_AUTO_VP=1`` for CI. Emits ``HumanApprovalGate``.
+- Live extract guardrails: raw ``Qty`` ``~`` / float fail-closed; undo
+  digit-SKU LLM expansions (``Widg3tA``); soft-escalate source aliases
+  (``Widget Alpha``); soft ``vendor_injection_review`` for SQL-smuggle
+  vendors; Grok prompts ``extract-v6`` / ``approve-v6``.
+- Stateful ledger script ``scripts/run_stateful_ledger_live_grok.py`` with
+  ``STOCK_MULT``; Makefile ``make ledger`` / ``make ledger-live`` / ``make uat``.
+
+### Changed
+
+- Stage-graph validation edges renamed ``hard_issues`` /
+  ``hard_issues_empty`` (soft escalations still route to approval).
+- Prod profile defaults high-value Grok approve to deterministic
+  (``ApprovalAudit``); override with ``GALATIQ_HV_DETERMINISTIC=0|1``.
+- README version badges aligned to package version.
+
 ## [1.7.1] — 2026-10-12
 
 ### Fixed
@@ -201,7 +223,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.5.0...v1.6.0

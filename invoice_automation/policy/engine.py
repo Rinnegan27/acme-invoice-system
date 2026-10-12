@@ -48,6 +48,7 @@ SOFT_PREFIXES: tuple[str, ...] = (
     "po_qty_exceeded",
     "sku_typo_review",
     "vendor_split_risk",
+    "vendor_injection_review",
     "sku_variant_review",
 )
 

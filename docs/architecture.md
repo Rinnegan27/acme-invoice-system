@@ -10,8 +10,8 @@ Custom SQLite work-queue orchestration (not LangGraph). Explicit conditional edg
 flowchart LR
   START --> ING["ingestion"]
   ING -->|extracted| VAL["validation"]
-  VAL -->|issues_nonempty| REJ["REJECT"]
-  VAL -->|issues_empty| APP["approval"]
+  VAL -->|hard_issues| REJ["REJECT"]
+  VAL -->|hard_issues_empty| APP["approval"]
   APP -->|vp_rejected| REJ
   APP -->|approved_with_permit| PAY["payment"]
   PAY -->|gateway_ok_stock_ok| PAID["PAID"]
@@ -21,7 +21,7 @@ flowchart LR
 | Edge `when` | Owner |
 |-------------|--------|
 | `extracted` | `IngestionWorker` enqueues validation |
-| `issues_nonempty` / `issues_empty` | `ValidationWorker` |
+| `hard_issues` / `hard_issues_empty` | `ValidationWorker` (soft escalations still enqueue approval) |
 | `vp_rejected` / `approved_with_permit` | `ApprovalWorker` + HMAC permit |
 | `gateway_ok_stock_ok` / `gateway_ok_stock_fail` | `PaymentWorker` + `PaymentSaga` |
 

@@ -293,6 +293,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force strict catalog unit-price checks (implies no soft bands)",
     )
+    hitl = parser.add_mutually_exclusive_group()
+    hitl.add_argument(
+        "--human-approval",
+        action="store_true",
+        help=(
+            "Force CLI human approve/reject/escalate when VP scrutiny applies "
+            "(high-value or soft escalations)"
+        ),
+    )
+    hitl.add_argument(
+        "--auto-vp",
+        action="store_true",
+        help=(
+            "Skip CLI human gate; use automated VP agent only "
+            "(default for non-TTY / CI; also GALATIQ_CLI_AUTO_VP=1)"
+        ),
+    )
     return parser
 
 
@@ -351,6 +368,22 @@ def main(argv: list[str] | None = None) -> int:
         report.save(sim_dir / "last_report.json")
         return 0 if report.ok else 1
 
+    from invoice_automation.cli_hitl import cli_human_gate_enabled, make_cli_human_gate
+
+    if args.auto_vp:
+        hitl_force: bool | None = False
+    elif args.human_approval:
+        hitl_force = True
+    else:
+        hitl_force = None
+    human_gate = make_cli_human_gate() if cli_human_gate_enabled(force=hitl_force) else None
+    if human_gate is not None:
+        print(
+            "CLI human approval gate ON "
+            "(a=approve / r=reject / e=escalate-to-VP when scrutiny applies).",
+            file=sys.stderr,
+        )
+
     try:
         pipe = Pipeline(
             work_dir=args.work_dir,
@@ -358,6 +391,7 @@ def main(argv: list[str] | None = None) -> int:
             max_steps=args.max_steps,
             profile=args.profile,
             require_price_check=True if args.strict_master_data else None,
+            human_gate=human_gate,
         )
     except (RuntimeError, ValueError, Exception) as exc:
         print(f"error: {exc}", file=sys.stderr)

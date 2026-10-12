@@ -25,6 +25,11 @@ _INJECTION_MARKERS = (
     "you are now",
     "disregard",
 )
+# SQL / statement-smuggling in vendor text → soft VP review (not hard reject).
+# Parameterized queries already prevent execution; escalate for human/VP scrutiny.
+_VENDOR_SQL_SMUGGLE = re.compile(
+    r"(?i)(\bdrop\s+table\b|\bunion\s+select\b|;\s*--|/\*!|\bxp_cmdshell\b)",
+)
 
 # Spaced catalog forms that extractors often "fix" into compact SKUs.
 # When the source shows the spaced form and the extract returns the compact
@@ -37,11 +42,13 @@ _SKU_SPACE_TYPOS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 
 SKU_TYPO_REVIEW_PREFIX = "sku_typo_review"
 VENDOR_SPLIT_RISK_PREFIX = "vendor_split_risk"
+VENDOR_INJECTION_REVIEW_PREFIX = "vendor_injection_review"
 
 # Soft findings that escalate to VP instead of hard-reject or silent auto-pay.
 SOFT_ESCALATION_PREFIXES: tuple[str, ...] = (
     SKU_TYPO_REVIEW_PREFIX,
     VENDOR_SPLIT_RISK_PREFIX,
+    VENDOR_INJECTION_REVIEW_PREFIX,
     "sku_variant_review",
 )
 
@@ -132,6 +139,8 @@ def collect_invariant_issues(invoice: Invoice) -> list[str]:
     vendor_l = (invoice.vendor or "").lower()
     if any(m in vendor_l for m in _INJECTION_MARKERS):
         issues.append("suspicious_vendor_text")
+    elif _VENDOR_SQL_SMUGGLE.search(invoice.vendor or ""):
+        issues.append(f"{VENDOR_INJECTION_REVIEW_PREFIX}:sql_smuggle")
 
     priced = True
     line_total = Decimal("0")

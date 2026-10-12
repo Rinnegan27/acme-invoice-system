@@ -11,6 +11,7 @@ They raise ``GrokAuthError`` again.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from invoice_automation.adapters.parsers import normalize_invoice_id
@@ -22,7 +23,7 @@ from invoice_automation.domain.exceptions import (
     PaymentError,
     ValidationError,
 )
-from invoice_automation.domain.models import InvoiceStatus, StageName
+from invoice_automation.domain.models import ApprovalDecision, Invoice, InvoiceStatus, StageName
 from invoice_automation.ports.contracts import (
     EventSink,
     InventoryRepository,
@@ -90,20 +91,33 @@ class IngestionWorker:
         correlation_id = msg["correlation_id"]
         try:
             raw = _read_source(path)
+            # Fail closed on document Qty markers even if the LLM coerces ints.
+            from invoice_automation.adapters.parsers import assert_raw_quantity_integrity
+
+            assert_raw_quantity_integrity(raw)
             result = self.llm.extract(raw, path)
             from invoice_automation.policy.sku_resolve import (
                 resolve_line_items,
+                soft_issues_from_source_items,
                 undo_abbreviation_expansions,
+                undo_digit_sku_expansions,
             )
 
             # Undo LLM over-expansion of short abbreviations (W-A ≠ WidgetA).
             items = undo_abbreviation_expansions(raw, result.invoice.items)
+            # Digit-bearing source tokens are not fat-finger fixes (Widg3tA ≠ WidgetA).
+            items = undo_digit_sku_expansions(raw, items)
             resolved_items, resolve_soft = resolve_line_items(items)
+            # Alias / unique-close Item: phrases escalate to VP (Widget Alpha).
+            source_soft = soft_issues_from_source_items(raw, resolved_items)
+            soft = list(dict.fromkeys([*resolve_soft, *source_soft]))
+            prior_issues = list(result.invoice.issues)
+            merged = tuple(dict.fromkeys([*prior_issues, *soft]))
             invoice = result.invoice.with_updates(
                 correlation_id=correlation_id,
                 source_path=str(path),
                 items=resolved_items,
-                issues=tuple(resolve_soft) if resolve_soft else result.invoice.issues,
+                issues=merged,
             )
             self.events.emit(
                 "InvoiceExtracted",
@@ -298,7 +312,7 @@ class ValidationWorker:
 
 
 class ApprovalWorker:
-    """Run VP or system approval. Issue a PaymentPermit. Enqueue payment.
+    """Run human / VP / system approval. Issue a PaymentPermit. Enqueue payment.
 
     Parameters
     ----------
@@ -310,16 +324,18 @@ class ApprovalWorker:
         Append-only event log.
     metrics : MetricsCollector
         Approval and reflection counters.
+        human_gate : callable or None
+        Optional CLI/desk callback ``(Invoice) -> str`` returning
+        ``approve``, ``reject``, or ``escalate``. Invoked when high-value or
+        soft escalations require scrutiny. ``escalate`` defers to the
+        automated VP agent (``llm.approve``).
 
     Notes
     -----
-    The CLI has no interactive human reject. Rejection happens when:
-
-    * validation left issues, or
-    * the LLM or stub returns ``approved=False``, or
-    * ``PolicyEngine.issue_permit`` denies payment.
-
-    Human reject and escalate live in the FastAPI workbench, not in the CLI.
+    Rejection also happens when validation left hard issues, the LLM returns
+    ``approved=False``, or ``PolicyEngine.issue_permit`` denies payment.
+    The FastAPI Control Centre remains the full desk path; the CLI gate covers
+    the same approve / reject / escalate choices for interactive runs.
     """
 
     def __init__(
@@ -328,11 +344,14 @@ class ApprovalWorker:
         llm: LLMClient,
         events: EventSink,
         metrics: MetricsCollector,
+        *,
+        human_gate: Callable[[Invoice], str] | None = None,
     ) -> None:
         self.queue = queue
         self.llm = llm
         self.events = events
         self.metrics = metrics
+        self.human_gate = human_gate
 
     def process_one(self) -> bool:
         """Approve or reject one invoice and attach a permit when approved.
@@ -348,8 +367,37 @@ class ApprovalWorker:
         started = time.perf_counter()
         correlation_id = msg["correlation_id"]
         try:
+            from invoice_automation.policy.invariants import (
+                is_soft_escalation,
+                partition_soft_escalation_issues,
+            )
+
             invoice = invoice_from_dict(msg["payload"]["invoice"])
-            decision = self.llm.approve(invoice)
+            _other, soft = partition_soft_escalation_issues(invoice.issues)
+            needs_scrutiny = invoice.is_high_value or bool(soft)
+            human_action: str | None = None
+            decision: ApprovalDecision
+            if needs_scrutiny and self.human_gate is not None:
+                human_action = str(self.human_gate(invoice))
+                if human_action == "approve":
+                    decision = ApprovalDecision(
+                        approved=True,
+                        reason="Human approved via CLI (HITL)",
+                        reflected=True,
+                    )
+                elif human_action == "reject":
+                    decision = ApprovalDecision(
+                        approved=False,
+                        reason="Human rejected via CLI (HITL)",
+                        reflected=True,
+                    )
+                else:
+                    # escalate → automated VP agent
+                    human_action = "escalate"
+                    decision = self.llm.approve(invoice)
+            else:
+                decision = self.llm.approve(invoice)
+
             audit = getattr(self.llm, "last_approve_audit", None)
             if isinstance(audit, dict) and audit:
                 self.events.emit(
@@ -357,6 +405,18 @@ class ApprovalWorker:
                     correlation_id,
                     invoice.invoice_id,
                     audit,
+                    stage=StageName.APPROVAL.value,
+                )
+            if human_action is not None:
+                self.events.emit(
+                    "HumanApprovalGate",
+                    correlation_id,
+                    invoice.invoice_id,
+                    {
+                        "action": human_action,
+                        "high_value": invoice.is_high_value,
+                        "soft": list(soft),
+                    },
                     stage=StageName.APPROVAL.value,
                 )
             if decision.approved:
@@ -367,18 +427,18 @@ class ApprovalWorker:
                     approval_reason=decision.reason,
                 )
                 try:
-                    from invoice_automation.policy.invariants import (
-                        is_soft_escalation,
-                        partition_soft_escalation_issues,
-                    )
-
-                    _other, soft = partition_soft_escalation_issues(invoice.issues)
                     needs_vp = invoice.is_high_value or bool(soft)
+                    if human_action == "approve":
+                        actor = "human_cli"
+                    elif needs_vp:
+                        actor = "vp_agent"
+                    else:
+                        actor = "system"
                     # LLM text never authorizes pay — only a verified permit does.
-                    # VP may clear soft escalation findings via override.
+                    # Human / VP may clear soft escalation findings via override.
                     permit = get_policy_engine().issue_permit(
                         invoice,
-                        actor="vp_agent" if needs_vp else "system",
+                        actor=actor,
                         open_issues=invoice.issues,
                         allow_soft_override=any(is_soft_escalation(i) for i in invoice.issues),
                     )
@@ -408,6 +468,8 @@ class ApprovalWorker:
                         "reason": decision.reason,
                         "reflected": decision.reflected,
                         "permit_nonce": permit.nonce,
+                        "human": human_action == "approve",
+                        "actor": actor,
                     },
                     stage=StageName.APPROVAL.value,
                 )
@@ -429,7 +491,11 @@ class ApprovalWorker:
                     "InvoiceRejected",
                     correlation_id,
                     invoice.invoice_id,
-                    {"reason": decision.reason, "reflected": decision.reflected},
+                    {
+                        "reason": decision.reason,
+                        "reflected": decision.reflected,
+                        "human": human_action == "reject",
+                    },
                     stage=StageName.APPROVAL.value,
                 )
                 self.metrics.incr_rate(StageName.APPROVAL.value, "rejected")

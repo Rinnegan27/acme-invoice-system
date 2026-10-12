@@ -68,6 +68,16 @@ def test_hv_fakeitem_rejected_without_model() -> None:
     client.chat.completions.create.assert_not_called()
 
 
+def test_hv_deterministic_defaults_on_for_prod(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GALATIQ_HV_DETERMINISTIC", raising=False)
+    llm = GrokLLM(api_key="xai-test-fixture-key-not-placeholder", profile="prod")
+    assert llm._hv_deterministic() is True
+    llm_case = GrokLLM(api_key="xai-test-fixture-key-not-placeholder", profile="case")
+    assert llm_case._hv_deterministic() is False
+    monkeypatch.setenv("GALATIQ_HV_DETERMINISTIC", "0")
+    assert llm._hv_deterministic() is False
+
+
 def test_hv_deterministic_single_call(monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 

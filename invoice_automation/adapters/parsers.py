@@ -175,6 +175,32 @@ def _english_word_quantity(text: str) -> int | None:
     return None
 
 
+def assert_raw_quantity_integrity(raw: str) -> None:
+    """Fail closed when the document shows approximate or non-integer Qty.
+
+    Parameters
+    ----------
+    raw : str
+        Full invoice source text (pre- or post-LLM).
+
+    Raises
+    ------
+    ExtractionError
+        When ``Qty`` uses ``~``, ``%``, or a non-integer decimal.
+
+    Notes
+    -----
+    Call this on the raw document even when Grok returns integer quantities so
+    live extract cannot silently coerce ``~5`` or ``5.0000001`` into stock draws.
+    """
+    if (
+        re.search(r"(?i)Qty\s*[:\s]+~", raw or "")
+        or re.search(r"(?i)Qty\s*[:\s]+[\d,]+\.\d+", raw or "")
+        or re.search(r"(?i)Qty\s*[:\s]+[\d,]+%", raw or "")
+    ):
+        raise ExtractionError("invalid_quantity:symbol_or_fraction")
+
+
 def _to_quantity(value: Any) -> int:
     """Parse a line quantity; reject fractions, percents, and approximations.
 
@@ -642,13 +668,7 @@ def _from_text(raw: str, source_path: str) -> Invoice:
     )
     due_date = _parse_date(_find(r"(?:Due\s*Date|Due\s*Dt|Due)\s*[:]\s*(.+)", raw))
 
-    # Approximate / percent / fractional quantities are data-integrity failures.
-    if (
-        re.search(r"(?i)Qty\s*[:\s]+~", raw)
-        or re.search(r"(?i)Qty\s*[:\s]+[\d,]+\.\d+", raw)
-        or re.search(r"(?i)Qty\s*[:\s]+[\d,]+%", raw)
-    ):
-        raise ExtractionError("invalid_quantity:symbol_or_fraction")
+    assert_raw_quantity_integrity(raw)
 
     items: list[LineItem] = []
     patterns = [

@@ -8,7 +8,7 @@
 
 .DEFAULT_GOAL := build
 
-.PHONY: all build sync lint fmt test smoke blackbox whitebox quality check cli-stub report scenario-proof
+.PHONY: all build sync lint fmt test smoke blackbox whitebox quality check cli-stub report scenario-proof ledger ledger-live uat
 
 UV ?= uv
 PYTEST_ENV = GALATIQ_PERMIT_SECRET=ci-test-secret-do-not-use-in-prod
@@ -57,3 +57,17 @@ report:
 
 scenario-proof:
 	$(PYTEST_ENV) $(UV) run python scripts/scenario_proof.py
+
+# Offline UAT harness (docs/uat_test_cases.md).
+uat:
+	$(PYTEST_ENV) $(UV) run pytest -q tests/test_uat_scenarios.py
+
+# Sequential case-core ledger (1× seed, stub). STOCK_MULT / LEDGER_LLM override.
+ledger:
+	$(PYTEST_ENV) STOCK_MULT=$${STOCK_MULT:-1} LEDGER_LLM=$${LEDGER_LLM:-stub} \
+		$(UV) run python scripts/run_stateful_ledger_live_grok.py
+
+# Live Grok ledger (default 15× seed so sequential draws stay non-negative).
+ledger-live:
+	$(PYTEST_ENV) STOCK_MULT=$${STOCK_MULT:-15} LEDGER_LLM=grok \
+		$(UV) run python scripts/run_stateful_ledger_live_grok.py

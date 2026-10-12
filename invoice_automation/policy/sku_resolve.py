@@ -259,6 +259,106 @@ def _is_abbrev_expansion(short_compact: str, catalog_sku: str) -> bool:
     return csku.startswith(short_compact) or _initials(catalog_sku) == short_compact
 
 
+def undo_digit_sku_expansions(
+    raw_text: str,
+    items: Sequence[LineItem],
+    catalog: Sequence[str] | None = None,
+) -> tuple[LineItem, ...]:
+    """Revert LLM maps of digit-bearing source tokens back to the document SKU.
+
+    Parameters
+    ----------
+    raw_text : str
+        Original invoice text.
+    items : sequence of LineItem
+        Extracted lines (may already be catalog codes).
+    catalog : sequence of str or None
+        Catalog codes.
+
+    Returns
+    -------
+    tuple of LineItem
+        Items with digit-OCR tokens restored so validation can ``unknown_item``.
+
+    Notes
+    -----
+    ``Widg3tA`` must not silently become ``WidgetA``. Digits in the source
+    token are treated as a different product code, not a fat-finger fix.
+    """
+    cat = set(catalog or DEFAULT_CATALOG)
+    digit_tokens: list[str] = []
+    for m in _ITEM_LINE.finditer(raw_text or ""):
+        token = m.group(1).strip().split()[0].strip("\"'")
+        if token and _HAS_DIGIT.search(token):
+            digit_tokens.append(token)
+    if not digit_tokens:
+        return tuple(items)
+
+    out: list[LineItem] = []
+    used: set[str] = set()
+    for item in items:
+        restored = None
+        if item.sku in cat:
+            for token in digit_tokens:
+                key = compact_sku(token)
+                if key in used:
+                    continue
+                # Same line mapped away from a digit-bearing source identity.
+                if compact_sku(token) != compact_sku(item.sku):
+                    restored = token
+                    used.add(key)
+                    break
+        if restored is not None:
+            out.append(LineItem(sku=restored, quantity=item.quantity, unit_price=item.unit_price))
+        else:
+            out.append(item)
+    return tuple(out)
+
+
+def soft_issues_from_source_items(
+    raw_text: str,
+    items: Sequence[LineItem],
+    catalog: Sequence[str] | None = None,
+) -> list[str]:
+    """Soft-escalate when ``Item:`` text uniquely maps to a billed catalog SKU.
+
+    Parameters
+    ----------
+    raw_text : str
+        Original invoice text.
+    items : sequence of LineItem
+        Resolved line items (catalog codes after extract).
+    catalog : sequence of str or None
+        Catalog codes.
+
+    Returns
+    -------
+    list of str
+        Soft ``sku_typo_review`` / ``sku_variant_review`` codes for VP.
+
+    Notes
+    -----
+    Exact compact matches (``Widget A`` → ``WidgetA``) stay silent auto-pay.
+    Alias / unique-close phrases (``Widget Alpha`` → ``WidgetA``) escalate.
+    """
+    resolver = CatalogResolver(catalog or DEFAULT_CATALOG)
+    present = {item.sku for item in items}
+    issues: list[str] = []
+    seen: set[str] = set()
+    for m in _ITEM_LINE.finditer(raw_text or ""):
+        token = m.group(1).strip()
+        if not token:
+            continue
+        match = resolver.resolve(token)
+        if match.resolved not in present:
+            continue
+        issue = resolver.soft_issue(token, match)
+        if issue and issue not in seen:
+            seen.add(issue)
+            issues.append(issue)
+    return issues
+
+
 def undo_abbreviation_expansions(
     raw_text: str,
     items: Sequence[LineItem],

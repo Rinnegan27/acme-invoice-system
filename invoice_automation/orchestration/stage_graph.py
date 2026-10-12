@@ -50,8 +50,12 @@ class GraphEdge:
 EDGES: tuple[GraphEdge, ...] = (
     GraphEdge("START", StageName.INGESTION.value, "file_enqueued"),
     GraphEdge(StageName.INGESTION.value, StageName.VALIDATION.value, "extracted"),
-    GraphEdge(StageName.VALIDATION.value, TERMINAL_REJECT, "issues_nonempty"),
-    GraphEdge(StageName.VALIDATION.value, StageName.APPROVAL.value, "issues_empty"),
+    GraphEdge(StageName.VALIDATION.value, TERMINAL_REJECT, "hard_issues"),
+    GraphEdge(
+        StageName.VALIDATION.value,
+        StageName.APPROVAL.value,
+        "hard_issues_empty",  # soft escalations still go to approval (VP / HITL)
+    ),
     GraphEdge(StageName.APPROVAL.value, TERMINAL_REJECT, "vp_rejected"),
     GraphEdge(
         StageName.APPROVAL.value,

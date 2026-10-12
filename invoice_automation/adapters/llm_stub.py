@@ -104,10 +104,23 @@ class OfflineLLM:
                 ),
                 reflected=True,
             )
+        injection = [i for i in soft if str(i).startswith("vendor_injection_review")]
+        if injection:
+            # Parameterized SQL is safe; stub VP clears after noting the smuggle attempt.
+            return ApprovalDecision(
+                approved=True,
+                reason=(
+                    "VP approved after vendor injection review "
+                    "(untrusted vendor text; queries are parameterized): " + "; ".join(injection)
+                ),
+                reflected=True,
+            )
         typo_reviews = [
             i
             for i in soft
-            if not is_vendor_split_risk(i) and not str(i).startswith("sku_variant_review")
+            if not is_vendor_split_risk(i)
+            and not str(i).startswith("sku_variant_review")
+            and not str(i).startswith("vendor_injection_review")
         ]
         ambiguous = [i for i in typo_reviews if "→ambiguous:" in str(i)]
         if ambiguous:

@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.4.0"><img alt="Version" src="https://img.shields.io/badge/version-1.4.0-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.8.0"><img alt="Version" src="https://img.shields.io/badge/version-1.8.0-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
   <a href="https://github.com/Rinnegan27/galatiq-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
@@ -169,6 +169,13 @@ uv run python main.py --all --llm=stub --profile=case
 # Prod hardening (default): strict catalog prices + PO coverage
 uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub --profile=prod
 
+# Offline UAT (docs/uat_test_cases.md)
+uv run pytest tests/test_uat_scenarios.py -q
+
+# Stateful inventory ledger (case core 1001–1016; STOCK_MULT scales seed)
+STOCK_MULT=1 LEDGER_LLM=stub make ledger
+# Live Grok at 15× seed: STOCK_MULT=15 make ledger-live
+
 # AP Control Centre UI
 uv run uvicorn web.app:app --reload --port 8000
 # http://localhost:8000
@@ -176,7 +183,9 @@ uv run uvicorn web.app:app --reload --port 8000
 # Reconcile: http://localhost:8000/reconcile
 ```
 
-Set `GALATIQ_HV_DETERMINISTIC=1` for one-shot temperature-0 high-value Grok approval (records `ApprovalAudit`).
+High-value Grok approval is **deterministic by default in `prod`** (one temperature-0
+call + `ApprovalAudit`). Set `GALATIQ_HV_DETERMINISTIC=0` to force the critique loop,
+or `=1` to force deterministic under `case` profile.
 
 Architecture notes (orchestration graph + OTel path): [docs/architecture.md](docs/architecture.md).
 
@@ -225,6 +234,8 @@ make scenario-proof
 | ⬜ White box | `make whitebox` | Parsers, policy, hardening |
 | 🧹 Lint | `make lint` | Ruff check + format |
 | 🧪 Scenario proof | `make scenario-proof` | Case README invoice matrix |
+| 📋 UAT offline | `make uat` | `docs/uat_test_cases.md` |
+| 📒 Ledger | `make ledger` / `make ledger-live` | Sequential stock (``STOCK_MULT``) |
 
 > **Aether Helix** is the in-repo quality persona. It is a project nickname for gates. It is not a product role.
 
@@ -298,17 +309,26 @@ This secret signs **PaymentPermit** tokens. The LLM cannot authorize pay alone.
 
 ### 🖥️ CLI vs Approvals desk
 
-The CLI has no interactive human reject.
+When an invoice needs VP scrutiny (amount ≥ $10k or soft escalations), an
+**interactive CLI** prompts for human HITL — the same choices as the desk:
+
+| Choice | Result |
+|--------|--------|
+| `[a] Approve` | Human approve + pay (`PaymentPermit` actor `human_cli`) |
+| `[r] Reject` | Human reject; no pay |
+| `[e] Escalate` | Automated VP agent (Grok/stub reflection) |
 
 | Path | Result |
 |------|--------|
-| Clean invoice ≤ $10k | Auto-approve and pay (stub) |
-| Clean invoice > $10k | Stub high-value rules may approve or reject |
-| Validation issues | Reject |
+| Clean invoice ≤ $10k, no soft issues | Auto-approve and pay |
+| Scrutiny required + TTY | Prompt a / r / e (default) |
+| Scrutiny + non-TTY / CI | Automated VP (`--auto-vp` or `GALATIQ_CLI_AUTO_VP=1`) |
+| Validation hard issues | Reject |
 
-Human escalate / reject / Approvals-desk pay is in the Control Centre only.
+Flags: `--human-approval` (force prompt) · `--auto-vp` (force agent only).
 
-Role switcher in the UI is **demo auth only** (unsigned cookie).
+The FastAPI Control Centre remains the full Exceptions / Approvals desk.
+Role switcher in the UI is **demo auth only**.
 
 ---
 
@@ -440,7 +460,7 @@ This build covers the full Galatiq case surface.
 | Offline / no live payment rails | Stub LLM + mock gateway |
 | Multi-format corpus | txt / json / csv / xml / pdf under `data/invoices/` |
 | High-value scrutiny | Stub/Grok reflection over $10k; Control Centre Approvals desk |
-| Human-in-the-loop | Exceptions, escalate, approve/decline in FastAPI `web/` |
+| Human-in-the-loop | CLI a/r/e gate + Exceptions/Approvals in FastAPI `web/` |
 | Payment cannot be LLM-authorized | HMAC `PaymentPermit`; nonce consumed only after successful pay |
 | Fail-closed extraction | Missing totals and bad keys do not silently succeed |
 | Reproducible tooling | `uv.lock`, Makefile, ruff, smoke / black_box / white_box markers |
@@ -459,7 +479,7 @@ This build covers the full Galatiq case surface.
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | 🏷️ Releases | https://github.com/Rinnegan27/galatiq-invoice-system/releases |
 
-Current package version: **1.4.0** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **1.8.0** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 
