@@ -31,6 +31,8 @@ if str(ROOT) not in sys.path:
 
 # Permit secret for local offline runs. Do not use this value in production.
 os.environ.setdefault("GALATIQ_PERMIT_SECRET", "scenario-proof-local-secret-do-not-use")
+# Case README matrix needs soft price bands (not prod hardening).
+os.environ["GALATIQ_PROFILE"] = "case"
 
 from invoice_automation.orchestration.pipeline import Pipeline  # noqa: E402
 
@@ -148,7 +150,7 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="scenario_proof_") as tmp:
         work = Path(tmp)
-        pipe = Pipeline(work_dir=work, use_grok=False)
+        pipe = Pipeline(work_dir=work, use_grok=False, profile="case")
         results: list[dict[str, object]] = []
         all_ok = True
         for row in SCENARIOS:

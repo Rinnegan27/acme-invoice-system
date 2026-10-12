@@ -120,10 +120,15 @@ class Pipeline:
         Drain budget. Remaining backlog emits ``DrainBudgetExceeded``.
     permit_secret : bytes or str or None
         HMAC secret for PaymentPermit. Default reads ``GALATIQ_PERMIT_SECRET``.
-    require_price_check : bool
-        When True, enable strict catalog unit-price checks (``--strict-master-data``).
-    require_po : bool
-        When True, require PO coverage for each SKU.
+    profile : str or None
+        Master-data profile (``prod`` default, ``case`` for corpus). Reads
+        ``GALATIQ_PROFILE`` when None.
+    require_price_check : bool or None
+        Override strict catalog unit-price checks. None uses the profile.
+    require_po : bool or None
+        Override PO coverage. None uses the profile.
+    soft_price_bands : bool or None
+        Override soft price bands. None uses the profile.
     """
 
     def __init__(
@@ -134,21 +139,32 @@ class Pipeline:
         event_log_path: str | Path | None = None,
         max_steps: int = 200,
         permit_secret: bytes | str | None = None,
-        require_price_check: bool = False,
-        require_po: bool = False,
+        profile: str | None = None,
+        require_price_check: bool | None = None,
+        require_po: bool | None = None,
+        soft_price_bands: bool | None = None,
     ) -> None:
+        from invoice_automation.runtime_profile import resolve_master_data
+
+        flags = resolve_master_data(
+            profile=profile,
+            require_price_check=require_price_check,
+            require_po=require_po,
+            soft_price_bands=soft_price_bands,
+        )
         self.work_dir = Path(work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.max_steps = max_steps
+        self.profile = flags.profile
         db_path = self.work_dir / "system.db"
         self.db_path = db_path
         self.queue = SqliteWorkQueue(db_path, SCHEMA_PATH)
         self.inventory = SqliteInventoryRepository(
             self.work_dir / "inventory.db",
             reseeds=True,
-            require_price_check=require_price_check,
-            require_po=require_po,
-            soft_price_bands=not require_price_check,
+            require_price_check=flags.require_price_check,
+            require_po=flags.require_po,
+            soft_price_bands=flags.soft_price_bands,
         )
         self.events = JsonlEventLog(event_log_path or self.work_dir / "events.jsonl")
         self.metrics = InMemoryMetrics()

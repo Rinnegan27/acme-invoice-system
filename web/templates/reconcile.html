@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Reconcile · Galatiq AP{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div>
+    <h1>Pay / stock reconcile</h1>
+    <p>Gateway paid but inventory draw failed. Retry stock after a reseed, or ack after ops investigation.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-b flush">
+    {% if rows %}
+    <div class="table-scroll">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Vendor</th>
+            <th>Amount</th>
+            <th>Reason</th>
+            <th>Items</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td><code>{{ r.invoice_id }}</code></td>
+            <td>{{ r.vendor }}</td>
+            <td>{{ r.amount }}</td>
+            <td class="mono">{{ r.reason or '—' }}</td>
+            <td class="mono">
+              {% if r.items %}
+                {% for it in r.items %}{{ it.sku }}×{{ it.quantity }}{% if not loop.last %}, {% endif %}{% endfor %}
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if signed_in %}
+              <form method="post" action="/reconcile/{{ r.invoice_id }}/retry" style="display:inline">
+                <button class="primary" type="submit">Retry stock</button>
+              </form>
+              <form method="post" action="/reconcile/{{ r.invoice_id }}/ack" style="display:inline"
+                    onsubmit="return confirm('Ack without stock draw for {{ r.invoice_id }}?');">
+                <input type="hidden" name="note" value="ops ack" />
+                <button type="submit">Ack</button>
+              </form>
+              {% else %}
+              <a href="/login">Sign in</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">No open RECONCILE intents. Gateway/stock mismatches appear here.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

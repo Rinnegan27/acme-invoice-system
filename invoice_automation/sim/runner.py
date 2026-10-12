@@ -497,7 +497,8 @@ def run_case_simulation(
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    svc = WorkbenchService(work_dir, use_grok=use_grok)
+    # Case corpus uses soft price bands; force the case profile.
+    svc = WorkbenchService(work_dir, use_grok=use_grok, profile="case")
     results: list[CaseResult] = []
     for spec in cases or CASES:
         # Fresh store state between cases except idempotent which manages itself

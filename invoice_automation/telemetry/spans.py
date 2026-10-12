@@ -3,15 +3,16 @@
 Notes
 -----
 Write JSONL lines to ``spans.jsonl``. Write an OTLP/JSON batch to
-``otlp_traces.json``. Set ``GALATIQ_SPAN_CONSOLE=1`` for console output.
-Use the OpenTelemetry API when it is installed. A live collector is not
-required.
+``otlp_traces.json``. Set ``GALATIQ_SPAN_CONSOLE=1`` for stderr console
+output. Optional ``GALATIQ_OTLP_HTTP_ENDPOINT`` POSTs the OTLP/JSON batch
+(best-effort). Use the OpenTelemetry API when it is installed.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import uuid
 from collections.abc import Iterator
@@ -62,15 +63,17 @@ class SpanExporter:
         """
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(span, separators=(",", ":")) + "\n")
-        self._append_otlp(span)
+        batch = self._append_otlp(span)
         if os.environ.get("GALATIQ_SPAN_CONSOLE", "").strip() in {"1", "true", "yes"}:
             print(
                 f"[span] {span.get('name')} status={span.get('status')} "
                 f"attrs={span.get('attributes')}",
+                file=sys.stderr,
                 flush=True,
             )
+        _maybe_export_otlp_http(batch)
 
-    def _append_otlp(self, span: dict[str, Any]) -> None:
+    def _append_otlp(self, span: dict[str, Any]) -> dict[str, Any]:
         # Map one internal span into the OTLP/JSON resourceSpans shape.
         attrs = [
             {"key": str(k), "value": {"stringValue": str(v)}}
@@ -111,6 +114,25 @@ class SpanExporter:
             ]
         }
         self.otlp_path.write_text(json.dumps(batch, indent=2) + "\n", encoding="utf-8")
+        return batch
+
+
+def _maybe_export_otlp_http(batch: dict[str, Any]) -> None:
+    """POST OTLP/JSON to ``GALATIQ_OTLP_HTTP_ENDPOINT`` when set (best-effort)."""
+    endpoint = os.environ.get("GALATIQ_OTLP_HTTP_ENDPOINT", "").strip()
+    if not endpoint:
+        return
+    try:
+        import httpx
+
+        httpx.post(
+            endpoint,
+            json=batch,
+            headers={"Content-Type": "application/json"},
+            timeout=2.0,
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never break the pipeline
+        return
 
 
 @contextmanager

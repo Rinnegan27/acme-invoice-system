@@ -50,7 +50,7 @@ quality: lint
 check: quality
 
 cli-stub:
-	$(PYTEST_ENV) $(UV) run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
+	$(PYTEST_ENV) GALATIQ_PROFILE=case $(UV) run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub --profile=case
 
 report:
 	$(PYTEST_ENV) $(UV) run python scripts/quality_report.py

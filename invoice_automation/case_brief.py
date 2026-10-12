@@ -9,6 +9,7 @@ The submission matches the brief where the brief shows code.
 from __future__ import annotations
 
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -84,9 +85,14 @@ def mock_payment(vendor: Any, amount: Any) -> dict[str, str]:
     Returns
     -------
     dict
-        ``{"status": "success"}`` after the case log line prints.
+        ``{"status": "success"}`` after the case log line prints on stderr.
+
+    Notes
+    -----
+    The case brief prints a log line. This implementation writes that line to
+    ``stderr`` so CLI/sim ``stdout`` stays a single JSON document.
     """
-    print(f"Paid {amount} to {vendor}")
+    print(f"Paid {amount} to {vendor}", file=sys.stderr)
     return {"status": "success"}
 
 

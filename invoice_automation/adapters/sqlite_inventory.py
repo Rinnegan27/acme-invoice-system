@@ -79,15 +79,16 @@ class SqliteInventoryRepository:
         When True, require a PO line that covers each SKU quantity.
     require_price_check : bool
         When True, compare unit price to the exact catalog within
-        ``price_tolerance``. Off by default.
+        ``price_tolerance``.
     soft_price_bands : bool
         When True and strict check is off, flag prices outside seed bands.
-        On by default.
 
     Notes
     -----
     Soft band hits raise ``price_mismatch`` as a soft policy finding.
-    Strict catalog and PO checks stay opt-in so the case corpus can pay.
+    ``Pipeline`` sets these flags from ``GALATIQ_PROFILE`` (prod default =
+    strict price + PO; case = soft bands). Direct constructor defaults keep
+    soft bands for unit tests.
     """
 
     def __init__(

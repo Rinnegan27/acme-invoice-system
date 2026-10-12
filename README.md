@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.2.2"><img alt="Version" src="https://img.shields.io/badge/version-1.2.2-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.3.0"><img alt="Version" src="https://img.shields.io/badge/version-1.3.0-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
   <a href="https://github.com/Rinnegan27/galatiq-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
@@ -92,6 +92,7 @@ cp .env.example .env
 |----------|----------|
 | `XAI_API_KEY` | Leave blank for offline work. Set `xai-<your-real-key>` for live Grok. |
 | `GALATIQ_PERMIT_SECRET` | Leave blank or remove the line. First run creates a random HMAC secret. |
+| `GALATIQ_PROFILE` | Default **prod** (strict price + PO). Use **case** for the Galatiq corpus / scenario matrix. |
 
 ### 3️⃣ Case CLI contract (required path)
 
@@ -101,13 +102,13 @@ The case brief requires this command:
 python main.py --invoice_path=data/invoices/invoice1.txt
 ```
 
-With `uv` and the offline stub:
+With `uv` and the offline stub (case corpus profile for evaluator demos):
 
 ```bash
-uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
+uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub --profile=case
 ```
 
-You get a short JSON summary. Add `-v` for the full audit.
+Stdout is one JSON document. Payment log lines go to stderr. Add `-v` for the full audit.
 
 > 📎 `data/invoices/invoice1.txt` is an alias of **INV-1001**.
 
@@ -131,7 +132,7 @@ The default engine is Grok. If the key is missing or bad, the CLI asks for a key
 ### B. Offline happy path
 
 ```bash
-uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub
+uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub --profile=case
 ```
 
 Expect status `paid` for INV-1001.
@@ -142,7 +143,7 @@ Expect status `paid` for INV-1001.
 uv run python main.py --sim=case --llm=stub
 ```
 
-Expect all W1–W10 workflows to pass.
+Sim forces the **case** profile. Expect all W1–W10 workflows to pass. JSON is on stdout; payment prints are on stderr.
 
 ### 🧪 Scenario proof artifact
 
@@ -162,24 +163,28 @@ make scenario-proof
 ## 🛠️ Other common commands
 
 ```bash
-# All sample invoices (offline)
-uv run python main.py --all --llm=stub
+# All sample invoices (offline; case corpus discounts need --profile=case)
+uv run python main.py --all --llm=stub --profile=case
 
-# Strict catalog unit-price checks (demo / rubric mode)
-uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub --strict-master-data
+# Prod hardening (default): strict catalog prices + PO coverage
+uv run python main.py --invoice_path=data/invoices/invoice1.txt --llm=stub --profile=prod
 
 # AP Control Centre UI
 uv run uvicorn web.app:app --reload --port 8000
 # http://localhost:8000
 # Case Lab: http://localhost:8000/sim
+# Reconcile: http://localhost:8000/reconcile
 ```
 
 Set `GALATIQ_HV_DETERMINISTIC=1` for one-shot temperature-0 high-value Grok approval (records `ApprovalAudit`).
+
+Architecture notes (orchestration graph + OTel path): [docs/architecture.md](docs/architecture.md).
 
 | Surface | URL |
 |---------|-----|
 | 🖥️ Control Centre | http://localhost:8000 |
 | 🧫 Case Lab | http://localhost:8000/sim |
+| 🔧 Reconcile | http://localhost:8000/reconcile |
 
 ---
 
@@ -340,17 +345,21 @@ Case Lab: [http://localhost:8000/sim](http://localhost:8000/sim) (not in product
 
 This project uses a custom multi-stage pipeline. It uses SQLite queues, a workbench, optional Grok, and a non-LLM PaymentPermit fence. It is not LangGraph.
 
+Full diagram + OTel export path: [docs/architecture.md](docs/architecture.md).
+
 ```text
 Invoice files
   → Deterministic parsers (+ optional LLM extract)
-  → Inventory + invariant validation
+  → Inventory + invariant validation (GALATIQ_PROFILE)
   → Approval (stub/Grok) / HITL workbench
   → HMAC PaymentPermit (required)
   → Payment saga + outbox → JSONL
+  → RECONCILE desk when stock fails after pay
 ```
 
 ### 🛡️ Hardening notes
 
+- Default profile is **prod** (strict catalog price + PO). Use `--profile=case` for the case corpus.
 - Permit nonces live in SQLite `consumed_permits`.
 - Blank `GALATIQ_PERMIT_SECRET` creates a random secret.
 - The system verifies the permit before pay. It consumes the permit only after pay succeeds. Retries stay possible.
@@ -367,7 +376,7 @@ main.py                     # Case CLI
 invoice_automation/         # Domain, agents, saga, workbench, sim
 web/                        # FastAPI Control Centre
 data/invoices/              # 100-file corpus
-docs/                       # Scenario proof + evaluator artifacts
+docs/                       # Scenario proof, architecture, evaluator artifacts
 tests/                      # smoke / black_box / white_box
 uv.lock                     # Locked deps
 Makefile                    # default: make / make build (sync + all checks)
@@ -451,7 +460,7 @@ This build covers the full Galatiq case surface.
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | 🏷️ Releases | https://github.com/Rinnegan27/galatiq-invoice-system/releases |
 
-Current package version: **1.2.2** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **1.3.0** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 

@@ -280,9 +280,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Drain iteration budget (default 200)",
     )
     parser.add_argument(
+        "--profile",
+        choices=["prod", "case"],
+        default=None,
+        help=(
+            "Master-data profile: prod (default; strict price + PO) or case "
+            "(soft bands for the case corpus). Overrides GALATIQ_PROFILE."
+        ),
+    )
+    parser.add_argument(
         "--strict-master-data",
         action="store_true",
-        help="Enable strict catalog unit-price checks (off by default; soft bands remain)",
+        help="Force strict catalog unit-price checks (implies no soft bands)",
     )
     return parser
 
@@ -347,9 +356,10 @@ def main(argv: list[str] | None = None) -> int:
             work_dir=args.work_dir,
             use_grok=use_grok,
             max_steps=args.max_steps,
-            require_price_check=bool(args.strict_master_data),
+            profile=args.profile,
+            require_price_check=True if args.strict_master_data else None,
         )
-    except (RuntimeError, Exception) as exc:
+    except (RuntimeError, ValueError, Exception) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

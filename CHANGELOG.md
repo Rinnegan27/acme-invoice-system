@@ -7,6 +7,23 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-11
+
+### Added
+
+- ``GALATIQ_PROFILE`` / CLI ``--profile``: **prod** (default) hardens catalog
+  price + PO checks; **case** keeps soft bands for the case corpus.
+- Control Centre **Reconcile** desk (`/reconcile`): retry stock or ack
+  ``PaymentStockReconcile`` intents.
+- Optional ``GALATIQ_OTLP_HTTP_ENDPOINT`` best-effort OTLP/JSON POST.
+- ``docs/architecture.md`` orchestration diagram + OTel export path.
+
+### Changed
+
+- ``mock_payment`` and span console logs write to **stderr** so CLI/sim
+  ``stdout`` is a single JSON document.
+- Case sim, scenario-proof, and pytest force the ``case`` profile.
+
 ## [1.2.2] — 2026-10-11
 
 ### Added

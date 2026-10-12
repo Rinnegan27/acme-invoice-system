@@ -24,11 +24,16 @@ class WorkbenchService:
         work_dir: str | Path,
         *,
         use_grok: bool = False,
+        profile: str | None = None,
     ) -> None:
         self.work_dir = Path(work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.store = WorkbenchStore(self.work_dir / "workbench.db")
-        self.pipeline = Pipeline(work_dir=self.work_dir / "pipeline", use_grok=use_grok)
+        self.pipeline = Pipeline(
+            work_dir=self.work_dir / "pipeline",
+            use_grok=use_grok,
+            profile=profile,
+        )
 
     def reset(self) -> None:
         """Clear all workbench invoices and reseed inventory (demo hygiene)."""
@@ -445,6 +450,39 @@ class WorkbenchService:
             self_corrected=record.self_corrected,
             notes=record.notes,
         )
+
+    def list_reconcile(self) -> list[dict]:
+        """Open pay/stock RECONCILE intents from the pipeline saga."""
+        return self.pipeline.saga.list_reconcile_intents()
+
+    def retry_reconcile_stock(self, invoice_id: str, *, actor_role: str = "ops") -> dict:
+        """Retry stock decrement for a RECONCILE intent."""
+        from invoice_automation.domain.exceptions import PaymentError
+
+        try:
+            result = self.pipeline.saga.retry_stock_decrement(invoice_id)
+        except PaymentError as exc:
+            raise ValidationError(str(exc)) from exc
+        self.pipeline.outbox.flush()
+        return {
+            "invoice_id": invoice_id,
+            "status": result.status,
+            "transaction_id": result.transaction_id,
+            "actor": actor_role,
+        }
+
+    def acknowledge_reconcile(
+        self, invoice_id: str, *, note: str = "", actor_role: str = "ops"
+    ) -> dict:
+        """Ack a RECONCILE intent without retrying stock."""
+        from invoice_automation.domain.exceptions import PaymentError
+
+        try:
+            self.pipeline.saga.acknowledge_reconcile(invoice_id, note=note)
+        except PaymentError as exc:
+            raise ValidationError(str(exc)) from exc
+        self.pipeline.outbox.flush()
+        return {"invoice_id": invoice_id, "status": "acked", "note": note, "actor": actor_role}
 
     def _require(self, record_id: int) -> WorkbenchRecord:
         record = self.store.get(record_id)

@@ -25,8 +25,8 @@ def test_strict_master_data_flags_catalog_mismatch(tmp_path: Path) -> None:
     assert any(i.startswith("price_mismatch:WidgetA") for i in issues)
 
 
-def test_default_soft_bands_allow_corpus_discount(tmp_path: Path) -> None:
-    pipe = Pipeline(work_dir=tmp_path / "run2", use_grok=False)
+def test_case_profile_soft_bands_allow_corpus_discount(tmp_path: Path) -> None:
+    pipe = Pipeline(work_dir=tmp_path / "run2", use_grok=False, profile="case")
     issues = pipe.inventory.check_availability(
         [LineItem(sku="WidgetA", quantity=1, unit_price=Decimal("240.00"))]
     )

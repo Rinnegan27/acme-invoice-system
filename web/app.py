@@ -483,6 +483,54 @@ async def audit(request: Request) -> HTMLResponse:
     )
 
 
+@app.get("/reconcile", response_class=HTMLResponse)
+async def reconcile(request: Request) -> HTMLResponse:
+    svc = _svc(request)
+    return templates.TemplateResponse(
+        request,
+        "reconcile.html",
+        _ctx(request, "reconcile", rows=svc.list_reconcile()),
+    )
+
+
+@app.post("/reconcile/{invoice_id}/retry")
+async def reconcile_retry(request: Request, invoice_id: str) -> RedirectResponse:
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    svc = _svc(request)
+    try:
+        result = svc.retry_reconcile_stock(invoice_id, actor_role=claims.actor)
+        return _redirect(
+            "/reconcile",
+            flash_kind="ok",
+            flash_msg=f"Stock retry ok for {result['invoice_id']}.",
+        )
+    except ValidationError as exc:
+        return _redirect("/reconcile", flash_kind="err", flash_msg=str(exc))
+
+
+@app.post("/reconcile/{invoice_id}/ack")
+async def reconcile_ack(
+    request: Request,
+    invoice_id: str,
+    note: str = Form(""),
+) -> RedirectResponse:
+    claims = _require_session(request)
+    if isinstance(claims, RedirectResponse):
+        return claims
+    svc = _svc(request)
+    try:
+        svc.acknowledge_reconcile(invoice_id, note=note, actor_role=claims.actor)
+        return _redirect(
+            "/reconcile",
+            flash_kind="ok",
+            flash_msg=f"Reconcile acked for {invoice_id}.",
+        )
+    except ValidationError as exc:
+        return _redirect("/reconcile", flash_kind="err", flash_msg=str(exc))
+
+
 @app.get("/invoices/{record_id}", response_class=HTMLResponse)
 async def invoice_detail(request: Request, record_id: int) -> HTMLResponse:
     svc = _svc(request)

@@ -30,14 +30,18 @@ DATA = ROOT / "data" / "invoices"
 def test_mock_payment_matches_case_brief(capsys) -> None:
     out = mock_payment("Widgets Inc.", 5000)
     assert out == {"status": "success"}
-    assert "Paid 5000 to Widgets Inc." in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "Paid 5000 to Widgets Inc." in captured.err
+    assert "Paid" not in captured.out
 
 
 def test_gateway_calls_case_mock_payment(capsys) -> None:
     gw = MockPaymentGateway()
     result = gw.pay("k1", "Acme", Decimal("12.50"))
     assert result.status == "success"
-    assert "Paid 12.50 to Acme" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "Paid 12.50 to Acme" in captured.err
+    assert "Paid" not in captured.out
 
 
 def test_inventory_seed_matches_case_readme(tmp_path: Path) -> None:
@@ -73,7 +77,9 @@ def test_grok_placeholder_and_cli_contract() -> None:
 
 
 def test_case_cli_path_runs_end_to_end(tmp_path: Path, capsys) -> None:
-    pipe = Pipeline(work_dir=tmp_path / "cli", use_grok=False)
+    pipe = Pipeline(work_dir=tmp_path / "cli", use_grok=False, profile="case")
     result = pipe.process_file(DATA / "invoice1.txt")
     assert result.status == "paid"
-    assert "Paid" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "Paid" in captured.err
+    assert "Paid" not in captured.out
