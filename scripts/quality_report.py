@@ -25,7 +25,7 @@ def _run(cmd: list[str]) -> tuple[int, str]:
 def main() -> int:
     from invoice_automation import __version__
 
-    print(f"galatiq-invoice-system version: {__version__}")
+    print(f"acme-invoice-system version: {__version__}")
     print(f"core/ absent: {not (ROOT / 'core').exists()}")
     print(f"uv.lock present: {(ROOT / 'uv.lock').is_file()}")
     print()

@@ -1,1 +1,1 @@
-"""Galatiq AP Control Centre (FastAPI)."""
+"""Acme AP Control Centre (FastAPI)."""

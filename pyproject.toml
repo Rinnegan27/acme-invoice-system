@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "galatiq-invoice-system"
-version = "2.0.0"
-description = "Multi-agent AP invoice automation for the Galatiq case: custom SQLite pipeline, Grok or offline stub, FastAPI Control Centre, HMAC PaymentPermit"
+name = "acme-invoice-system"
+version = "2.0.1"
+description = "Multi-agent AP invoice automation for Acme Corp: custom SQLite pipeline, Grok or offline stub, FastAPI Control Centre, HMAC PaymentPermit"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -34,7 +34,7 @@ dev = [
 ]
 
 [project.scripts]
-galatiq-invoice = "invoice_automation.main:main"
+acme-invoice = "invoice_automation.main:main"
 
 [tool.setuptools.packages.find]
 include = ["invoice_automation*"]
@@ -58,7 +58,7 @@ exclude = [
   ".galatiq_runtime",
   "ui",
   "notebooks",
-  "galatiq_invoice_system.egg-info",
+  "acme_invoice_system.egg-info",
 ]
 
 [tool.ruff.lint]

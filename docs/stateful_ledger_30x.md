@@ -1,6 +1,6 @@
 # Stateful Ledger Transformation (Case Core 1001–1016) — 30× seed
 
-Sequential live-Grok run over the Galatiq case invoice set ([data/invoices](https://github.com/galatiq-ai/galatiq-case-invoices/tree/main/data/invoices)). One shared inventory DB; stock is measured after each file.
+Sequential live-Grok run over the Acme case invoice set ([data/invoices](https://github.com/galatiq-ai/galatiq-case-invoices/tree/main/data/invoices)). One shared inventory DB; stock is measured after each file.
 
 Seed is case-brief baseline × **30** (FakeItem left at 0 unless ``STOCK_SCALE_ZERO=1``).
 

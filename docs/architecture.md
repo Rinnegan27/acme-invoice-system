@@ -1,6 +1,6 @@
 # Architecture
 
-Short operator notes for the Galatiq invoice pipeline.
+Short operator notes for the Acme invoice pipeline.
 
 ## Orchestration graph
 
@@ -35,7 +35,7 @@ Drain: `Pipeline.drain` → `select_ready_stage` in `stage_graph.py`.
 | **prod** (default) | `GALATIQ_PROFILE=prod` | strict catalog (±5%) | required | off |
 | **case** | `GALATIQ_PROFILE=case` | soft bands only | off | on |
 
-Case simulation, scenario-proof, and pytest set `case` so the Galatiq corpus matrix stays green.
+Case simulation, scenario-proof, and pytest set `case` so the case corpus matrix stays green.
 CLI default is **prod** unless `--profile=case` or the env is set.
 
 ## OpenTelemetry export path

@@ -1,4 +1,4 @@
-"""Galatiq AP Control Centre — Tableau-style FastAPI workbench."""
+"""Acme AP Control Centre — Tableau-style FastAPI workbench."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ from web.deps import (
 WEB_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
-app = FastAPI(title="Galatiq AP Control Centre")
+app = FastAPI(title="Acme AP Control Centre")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 
 _IDP = MockOidcIdp()

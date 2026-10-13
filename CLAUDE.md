@@ -64,7 +64,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
-## Galatiq project rules
+## Acme project rules
 
 - Canonical package is `invoice_automation/`. Do not recreate `core/`.
 - One orchestration path: queue drain via `Pipeline` (CLI, workbench, and `extract_and_validate` share it).

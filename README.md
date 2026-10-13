@@ -1,23 +1,23 @@
-# 🧾 Galatiq Invoice Processing System
+# 🧾 Acme Invoice Processing System
 
 <p align="center">
-  <strong>Multi-agent AP automation for the Galatiq case</strong><br/>
+  <strong>Multi-agent AP automation for Acme Corp</strong><br/>
   Custom SQLite pipeline · Live Grok or offline stub · FastAPI Control Centre · HMAC PaymentPermit
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v2.0.0"><img alt="Version" src="https://img.shields.io/badge/version-2.0.0-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/acme-invoice-system/releases/tag/v2.0.1"><img alt="Version" src="https://img.shields.io/badge/version-2.0.1-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/acme-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
-  <a href="https://github.com/galatiq-ai/galatiq-case-invoices"><img alt="Case brief" src="https://img.shields.io/badge/case-galatiq--case--invoices-f59e0b?style=for-the-badge"></a>
+  <a href="https://github.com/galatiq-ai/galatiq-case-invoices"><img alt="Case corpus" src="https://img.shields.io/badge/case-corpus-f59e0b?style=for-the-badge"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system">GitHub</a> ·
+  <a href="https://github.com/Rinnegan27/acme-invoice-system">GitHub</a> ·
   <a href="https://github.com/galatiq-ai/galatiq-case-invoices">Case brief</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases">Releases</a>
+  <a href="https://github.com/Rinnegan27/acme-invoice-system/releases">Releases</a>
 </p>
 
 ---
@@ -54,7 +54,7 @@ Install [uv](https://docs.astral.sh/uv/) first.
 Then run **one** command from the repo root:
 
 ```bash
-cd galatiq-invoice-system
+cd acme-invoice-system
 make
 ```
 
@@ -93,7 +93,7 @@ cp .env.example .env
 |----------|----------|
 | `XAI_API_KEY` | Leave blank for offline work. Set `xai-<your-real-key>` for live Grok. |
 | `GALATIQ_PERMIT_SECRET` | Leave blank or remove the line. First run creates a random HMAC secret. |
-| `GALATIQ_PROFILE` | Default **prod** (strict price + PO). Use **case** for the Galatiq corpus / scenario matrix. |
+| `GALATIQ_PROFILE` | Default **prod** (strict price + PO). Use **case** for the case corpus / scenario matrix. |
 
 ### 3️⃣ Case CLI contract (required path)
 
@@ -516,7 +516,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history. GitHub Releases hold the s
 
 ## ✅ How this solution meets the requirements
 
-This build covers the full Galatiq case surface.
+This build covers the full case surface.
 
 | Requirement | How we deliver it |
 |-------------|-------------------|
@@ -547,12 +547,12 @@ This build covers the full Galatiq case surface.
 | Resource | Link |
 |----------|------|
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
-| 🏷️ Releases | https://github.com/Rinnegan27/galatiq-invoice-system/releases |
+| 🏷️ Releases | https://github.com/Rinnegan27/acme-invoice-system/releases |
 
-Current package version: **2.0.0** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **2.0.1** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 
 <p align="center">
-  <sub>Coding rules → <a href="CLAUDE.md">CLAUDE.md</a> · Built for the <a href="https://github.com/galatiq-ai/galatiq-case-invoices">Galatiq case</a></sub>
+  <sub>Coding rules → <a href="CLAUDE.md">CLAUDE.md</a> · Built for <strong>Acme Corp</strong> AP · case corpus <a href="https://github.com/galatiq-ai/galatiq-case-invoices">upstream</a></sub>
 </p>

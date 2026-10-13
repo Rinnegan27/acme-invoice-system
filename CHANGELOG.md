@@ -7,11 +7,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-10-12
+
+### Changed
+
+- Public branding: repo / package / UI use **Acme Corp** (client). Upstream case corpus links unchanged. Internal env cookies (`GALATIQ_*`, `galatiq_session`) left as-is.
+
+
 ## [2.0.0] — 2026-10-12
 
 ### Added
 
-- Stable Galatiq case cut: wavefront pipeline, HMAC ``PaymentPermit``, CLI
+- Stable Acme case cut: wavefront pipeline, HMAC ``PaymentPermit``, CLI
   HITL (a/r/e), live extract guardrails, stateful ledger (1× / N× seed),
   FastAPI Control Centre, Aether Helix offline CI.
 
@@ -266,19 +273,20 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.1...v2.0.0
-[1.9.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.0...v1.9.1
-[1.9.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.8.0...v1.9.0
-[1.8.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...v1.8.0
-[1.7.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.0...v1.7.1
-[1.7.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.6.0...v1.7.0
-[1.6.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.5.0...v1.6.0
-[1.5.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.2...v1.3.0
-[1.2.2]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.1...v1.2.2
-[1.2.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.1.1...v1.2.0
-[1.1.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.1.0
+[Unreleased]: https://github.com/Rinnegan27/acme-invoice-system/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.9.1...v2.0.0
+[1.9.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.9.0...v1.9.1
+[1.9.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.7.1...v1.8.0
+[1.7.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.2.2...v1.3.0
+[1.2.2]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.1.1...v1.2.0
+[1.1.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/Rinnegan27/acme-invoice-system/releases/tag/v1.1.0

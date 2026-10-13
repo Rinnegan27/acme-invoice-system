@@ -1,4 +1,4 @@
-# Galatiq invoice system — operator targets (uv primary).
+# Acme invoice system — operator targets (uv primary).
 #
 # First-time / full build:
 #   make
