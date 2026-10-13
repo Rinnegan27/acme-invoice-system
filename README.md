@@ -368,25 +368,62 @@ This project uses a custom multi-stage pipeline with an **explicit stage graph**
 
 Full diagram + OTel export path: [docs/architecture.md](docs/architecture.md).
 
+### Stage graph (E2E)
+
 ```mermaid
 flowchart LR
-  START([Invoice file]) --> ING[Ingestion]
-  ING -->|extracted| VAL[Validation]
-  VAL -->|hard issues| REJ[REJECT]
-  VAL -->|clean or soft only| APP[Approval / HITL]
-  APP -->|reject| REJ
-  APP -->|approve + PaymentPermit| PAY[Payment]
-  PAY -->|gateway + stock OK| PAID[PAID]
-  PAY -->|gateway OK / stock fail| REC[RECONCILE]
+  START --> ING[ingestion]
+  ING -->|extracted| VAL[validation]
+  VAL -->|hard_issues| REJ[REJECT]
+  VAL -->|soft_only_or_clean| APP[approval_HITL]
+  APP -->|vp_or_human_deny| REJ
+  APP -->|approved_with_permit| PAY[payment]
+  PAY -->|gateway_ok_stock_ok| PAID[PAID]
+  PAY -->|gateway_ok_stock_fail| REC[RECONCILE]
 ```
 
-| Path | Trigger | Stock DB |
-|------|---------|----------|
-| Auto-pay | Clean, amount &lt; $10k, no soft issues | Full line decrement |
-| VP / HITL | Amount ≥ $10k **or** soft issue (`sku_typo_review`, alias, abbrev `W-A`, …) | Decrement only after permit + pay |
-| Hard reject | `unknown_item` (e.g. `Widg3tA`), `zero_stock`, bad qty, … | **No** stock write |
-| Revision | Same `invoice_id`, new content hash | Delta only (`prior_items` credit) |
-| Format twin | Same content, other file type | **No** second draw |
+Wavefront drain: `stage_graph.select_ready_stage` ← `Pipeline.drain` (sole orchestration path).
+
+### Invoice status machine
+
+| Status | Meaning |
+|--------|---------|
+| `received` | Enqueued |
+| `extracted` | Structured fields from file/LLM |
+| `validated` | Hard validation passed (may carry soft issues) |
+| `approved` | VP/human + HMAC `PaymentPermit` |
+| `rejected` | Hard validation, VP/human reject, or policy deny |
+| `paid` | Gateway success + stock applied |
+| `reconcile` | Gateway OK, stock fail — ops hold; permit **not** consumed |
+
+Parallel: `payment_intent` PENDING → SUCCEEDED \| FAILED \| RECONCILE. CLI HITL **a** / **r** / **e** when scrutiny + TTY.
+
+### How the DBs react
+
+| When | `inventory.db` | `system.db` |
+|------|----------------|-------------|
+| Seed / reseed | A15 B10 X5 FakeItem0 (×`STOCK_MULT`) | — |
+| Validation | **Read only** — `prior_items` credits prior paid qty | Read prior SUCCEEDED `items_json` |
+| First pay | Full line decrement | Intent SUCCEEDED + outbox; consume permit |
+| Revision pay | Delta only | `PaymentRevised` |
+| Format twin | **No** stock write | Replay; one SUCCEEDED intent |
+| Hard reject / VP deny | **No** stock write | Reject events |
+| RECONCILE | **No** stock write | Intent RECONCILE; permit kept |
+
+### Decision matrix (edge cases)
+
+| Path | Trigger | Expected | Stock DB |
+|------|---------|----------|----------|
+| Auto-pay | Clean, amount &lt; $10k, no soft issues | `paid` | Full line decrement |
+| VP / HITL | Amount ≥ $10k **or** soft issue (`sku_typo_review`, `W-A`, alias, …) | `paid` after permit | Decrement only after pay |
+| Hard reject | `Widg3tA`, unknown SKU, `zero_stock`, bad qty | `rejected` | **No** write |
+| Overstock @ 1× | INV-1002 (20× GadgetX, seed 5) | `rejected` `insufficient_stock` | **No** write |
+| Overstock @ 15× | same file | often `paid` | GadgetX−20 |
+| Revision | Same `invoice_id`, new hash (e.g. 1004→revised) | `paid` | Delta only |
+| Format twin | Same content, other file type (1011 txt/pdf) | `paid` replay | **No** second draw |
+| Prod absurd price | `profile=prod` catalog mismatch | `rejected` `price_mismatch` | **No** write |
+| RECONCILE | Gateway OK, stock fail | `reconcile` | Intent hold; permit not consumed |
+| Injection vendor | SQL-ish vendor string | soft review → pay | Inventory safe |
 
 CLI/sim **stdout** is one JSON document. Logs (including live httpx) go to **stderr**.
 
