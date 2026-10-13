@@ -540,8 +540,8 @@ def test_uat_compound_4_6_sql_injection_vendor(tmp_path: Path) -> None:
     )
     assert result.status == "paid"
 
-
     # --- 5. User journey (1.9.0): HITL, guardrails, revision, twin ---------------
+
 
 HV_HITL_BODY = """
 Invoice Number: {inv}
