@@ -198,3 +198,42 @@ These cases test whether the LLM is capable enough to resolve input variations o
 * **Payload Structure:** `Vendor: '; DROP TABLE inventory; --` | `Item: WidgetA` | `Qty: 1`
 * **Behavior Matrix:** Classic injection configurations buried directly inside unstructured text spaces.
 * **System Resolution:** Database connection routines utilize parametrized variable sets exclusively. String parameters are safely parsed as raw text variables, preserving database integrity.
+---
+
+## 5. User journey (1.8.0)
+
+Flow: **Capture → Validate → HITL / VP → Pay / Reject.**
+
+| Stage | What happens | Gate |
+| --- | --- | --- |
+| Capture | Parse file. Raw `Qty` markers (`~`, float) fail closed. Digit SKUs stay raw. | `IngestionFailed`, no stock draw |
+| Validate | Catalog, stock (with `prior_items` credit), math, soft findings. | Hard issue → reject |
+| HITL / VP | High value (>$10k) or soft finding → human gate or VP agent. | approve / reject / escalate |
+| Pay / Reject | `PaymentPermit` (HMAC) is required. LLM text never pays. | Permit or reject |
+
+Offline tests use `Pipeline(human_gate=lambda _inv: "approve" | "reject" | "escalate")`.
+Live CLI path (TTY, Grok): `uv run python -m invoice_automation.main --invoice_path=<file> --human-approval`,
+then press `a`, `r`, or `e`. Use `--auto-vp` or `GALATIQ_CLI_AUTO_VP=1` to skip the prompt.
+Live runs are manual. CI stays on `--llm=stub`.
+
+| TC ID | Journey step | Input | Expected (offline stub) |
+| --- | --- | --- | --- |
+| TC-HITL-01 | HITL approve (high value) | $10,250 clean | **paid**, actor `human_cli` |
+| TC-HITL-02 | HITL reject (high value) | $10,250 clean | **rejected**, "Human rejected" |
+| TC-HITL-03 | HITL escalate (high value) | $10,250 clean | **paid** via VP agent (`reflected`) |
+| TC-HITL-04 | HITL approve (soft) | `Widget Alpha` | **paid**, actor `human_cli` |
+| TC-HITL-05 | HITL reject (soft) | `Widget Alpha` | **rejected** |
+| TC-HITL-06 | HITL escalate (soft) | `Widget Alpha` | **paid** via VP agent |
+| TC-HITL-07 | No gate when clean | $1,250 `WidgetA` ×5 | **paid**, gate not called |
+| TC-HITL-08 | No gate on hard reject | $12,500 `WidgetB` ×25 | **rejected** `insufficient_stock`, gate not called |
+| TC-GUARD-01 | Digit SKU reject | `Item: Widg3tA` | **rejected** `unknown_item` |
+| TC-GUARD-02 | Qty `~5` fail closed | `Qty: ~5` | **failed**, `invalid_quantity`, no draw |
+| TC-GUARD-03 | Float qty fail closed | `Qty: 5.0000001` | **failed**, `invalid_quantity`, no draw |
+| TC-GUARD-04 | Widget Alpha soft VP | `Item: Widget Alpha` | soft finding, VP approves, **paid** |
+| TC-GUARD-05 | Vendor injection review then pay | `Vendor: '; DROP TABLE inventory; --` | `vendor_injection_review`, VP approves, **paid**, DB intact |
+| TC-REV-01 | Revision delta stock | `INV-QTY` WidgetA 3→4, 1 left | **paid**, stock 1→0, `PaymentRevised` |
+| TC-REV-02 | Revision beyond shelf | `INV-QTY` WidgetA 3→5, 1 left | **rejected** `insufficient_stock`, stock kept |
+| TC-TWIN-01 | Format twin | `invoice_1011.txt` then `.pdf` | both **paid**, one `payment_intent`, no second draw |
+
+Tests: `tests/test_uat_scenarios.py` (section 5), with `tests/test_cli_hitl.py` and
+`tests/test_live_guardrails.py` for unit-level checks.

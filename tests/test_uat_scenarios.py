@@ -539,3 +539,273 @@ def test_uat_compound_4_6_sql_injection_vendor(tmp_path: Path) -> None:
         """,
     )
     assert result.status == "paid"
+
+
+# --- 5. User journey (1.8.0): HITL, guardrails, revision, twin ---------------
+
+HV_HITL_BODY = """
+Invoice Number: {inv}
+Vendor: Big Co
+Item: WidgetA
+Qty: 10
+Unit Price: $250
+Item: WidgetB
+Qty: 8
+Unit Price: $500
+Item: GadgetX
+Qty: 5
+Unit Price: $750
+Total: $10250
+"""
+
+ALIAS_BODY = """
+Invoice Number: {inv}
+Vendor: Alias Traders
+Item: Widget Alpha
+Qty: 1
+Unit Price: $250
+Total: $250
+"""
+
+DATA = Path(__file__).resolve().parents[1] / "data" / "invoices"
+
+
+def _run_gate(tmp: Path, name: str, body: str, gate):
+    path = _write(tmp, name, body)
+    pipe = Pipeline(work_dir=tmp / f"run_{name}", use_grok=False, profile="case", human_gate=gate)
+    return pipe, pipe.process_file(path)
+
+
+def _gate_event(pipe: Pipeline) -> dict:
+    return next(e for e in pipe.events.read_all() if e["event_type"] == "HumanApprovalGate")
+
+
+@pytest.mark.parametrize(
+    ("tc_id", "body", "action", "expect"),
+    [
+        ("TC-HITL-01", HV_HITL_BODY.format(inv="INV-9501"), "approve", "paid"),
+        ("TC-HITL-02", HV_HITL_BODY.format(inv="INV-9502"), "reject", "rejected"),
+        ("TC-HITL-03", HV_HITL_BODY.format(inv="INV-9503"), "escalate", "paid"),
+        ("TC-HITL-04", ALIAS_BODY.format(inv="INV-9504"), "approve", "paid"),
+        ("TC-HITL-05", ALIAS_BODY.format(inv="INV-9505"), "reject", "rejected"),
+        ("TC-HITL-06", ALIAS_BODY.format(inv="INV-9506"), "escalate", "paid"),
+    ],
+)
+def test_uat_hitl_actions(tmp_path: Path, tc_id: str, body: str, action: str, expect: str) -> None:
+    pipe, result = _run_gate(tmp_path, f"{tc_id}.txt", body, lambda _inv: action)
+    assert result.status == expect, f"{tc_id}: {result.status} issues={result.issues}"
+    assert _gate_event(pipe)["payload"]["action"] == action
+    approved = [e for e in pipe.events.read_all() if e["event_type"] == "InvoiceApproved"]
+    if action == "approve":
+        assert approved[0]["payload"]["actor"] == "human_cli"
+        assert approved[0]["payload"]["human"] is True
+    if action == "reject":
+        assert not approved
+        assert "Human rejected" in (result.approval_reason or "")
+    if action == "escalate":
+        assert approved[0]["payload"]["reflected"] is True
+        assert approved[0]["payload"]["human"] is False
+
+
+def test_uat_hitl_07_gate_skipped_when_no_scrutiny(tmp_path: Path) -> None:
+    def _boom(_inv):
+        raise AssertionError("gate must not run for clean low-value invoice")
+
+    _pipe, result = _run_gate(
+        tmp_path,
+        "TC-HITL-07.txt",
+        """
+        Invoice Number: INV-9507
+        Vendor: Delta Corp
+        Item: WidgetA
+        Qty: 5
+        Unit Price: $250
+        Total: $1250
+        """,
+        _boom,
+    )
+    assert result.status == "paid"
+
+
+def test_uat_hitl_08_gate_skipped_on_hard_reject(tmp_path: Path) -> None:
+    def _boom(_inv):
+        raise AssertionError("gate must not run when validation rejects")
+
+    # High value plus overstock: stock check fails before any human or VP gate.
+    _pipe, result = _run_gate(
+        tmp_path,
+        "TC-HITL-08.txt",
+        """
+        Invoice Number: INV-9508
+        Vendor: Maxi-Corp
+        Item: WidgetB
+        Qty: 25
+        Unit Price: $500
+        Total: $12500
+        """,
+        _boom,
+    )
+    assert result.status == "rejected"
+    assert any("insufficient_stock" in i for i in result.issues)
+
+
+def test_uat_guard_01_digit_sku_rejects(tmp_path: Path) -> None:
+    result = _run(
+        tmp_path,
+        "TC-GUARD-01.txt",
+        """
+        Invoice Number: INV-9511
+        Vendor: SupplyCo
+        Item: Widg3tA
+        Qty: 3
+        Unit Price: $250
+        Total: $750
+        """,
+    )
+    assert result.status == "rejected"
+    assert any("unknown_item" in i for i in result.issues)
+
+
+@pytest.mark.parametrize(
+    ("tc_id", "qty"),
+    [("TC-GUARD-02", "~5"), ("TC-GUARD-03", "5.0000001")],
+)
+def test_uat_guard_qty_fail_closed(tmp_path: Path, tc_id: str, qty: str) -> None:
+    path = _write(
+        tmp_path,
+        f"{tc_id}.txt",
+        f"""
+        Invoice Number: INV-{tc_id[-2:]}00
+        Vendor: Approx Co
+        Item: GadgetX
+        Qty: {qty}
+        Unit Price: $100
+        Total: $500
+        """,
+    )
+    pipe = Pipeline(work_dir=tmp_path / f"run_{tc_id}", use_grok=False, profile="case")
+    result = pipe.process_file(path)
+    assert result.status == "failed", f"{tc_id}: {result.status}"
+    failed = [e for e in pipe.events.read_all() if e["event_type"] == "IngestionFailed"]
+    assert failed and "invalid_quantity" in failed[0]["payload"]["error"]
+    assert pipe.inventory.stock_levels()["GadgetX"] == 5  # fail closed: no draw
+
+
+def test_uat_guard_04_widget_alpha_soft_vp(tmp_path: Path) -> None:
+    path = _write(tmp_path, "TC-GUARD-04.txt", ALIAS_BODY.format(inv="INV-9514"))
+    pipe = Pipeline(work_dir=tmp_path / "run_g04", use_grok=False, profile="case")
+    result = pipe.process_file(path)
+    assert result.status == "paid"
+    events = pipe.events.read_all()
+    validated = next(e for e in events if e["event_type"] == "InvoiceValidated")
+    soft = validated["payload"].get("soft_escalations") or []
+    assert any("Widget Alpha" in str(s) and "WidgetA" in str(s) for s in soft)
+    approved = next(e for e in events if e["event_type"] == "InvoiceApproved")
+    assert approved["payload"]["reflected"] is True
+    assert approved["payload"]["actor"] == "vp_agent"
+
+
+def test_uat_guard_05_vendor_injection_review_then_pay(tmp_path: Path) -> None:
+    from invoice_automation.policy.invariants import VENDOR_INJECTION_REVIEW_PREFIX
+
+    path = _write(
+        tmp_path,
+        "TC-GUARD-05.txt",
+        """
+        Invoice Number: INV-9515
+        Vendor: '; DROP TABLE inventory; --
+        Item: WidgetA
+        Qty: 1
+        Unit Price: $250
+        Total: $250
+        """,
+    )
+    pipe = Pipeline(work_dir=tmp_path / "run_g05", use_grok=False, profile="case")
+    result = pipe.process_file(path)
+    assert result.status == "paid"
+    events = pipe.events.read_all()
+    validated = next(e for e in events if e["event_type"] == "InvoiceValidated")
+    soft = validated["payload"].get("soft_escalations") or []
+    assert any(str(s).startswith(VENDOR_INJECTION_REVIEW_PREFIX) for s in soft)
+    approved = next(e for e in events if e["event_type"] == "InvoiceApproved")
+    assert approved["payload"]["actor"] == "vp_agent"
+    assert pipe.inventory.stock_levels()["WidgetA"] == 14  # DB intact, one unit drawn
+
+
+def _tight_widget_a_pipe(tmp: Path) -> Pipeline:
+    """Leave WidgetA at 1 after a prior paid WidgetA×3 for INV-QTY."""
+    from decimal import Decimal
+
+    from invoice_automation.domain.models import LineItem
+
+    pipe = Pipeline(work_dir=tmp / "rt", use_grok=False, profile="case")
+    pipe.inventory.decrement_stock([LineItem("WidgetA", 11, Decimal("250"))])
+    paid = pipe.saga.pay(
+        invoice_id="INV-QTY",
+        vendor="Precision Parts Ltd.",
+        amount=Decimal("810"),
+        correlation_id="c-first",
+        items=(LineItem("WidgetA", 3, Decimal("250")),),
+    )
+    assert paid.status == "success"
+    assert pipe.inventory.stock_levels()["WidgetA"] == 1
+    return pipe
+
+
+def _revision_file(tmp: Path, qty: int) -> Path:
+    import json
+
+    path = tmp / f"inv_qty_rev_{qty}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "invoice_number": "INV-QTY",
+                "vendor": {"name": "Precision Parts Ltd."},
+                "date": "2026-01-22",
+                "due_date": "2026-02-22",
+                "line_items": [{"item": "WidgetA", "quantity": qty, "unit_price": 250.00}],
+                "subtotal": 250.00 * qty,
+                "tax_rate": 0.08,
+                "tax_amount": 20.00 * qty,
+                "total": 270.00 * qty,
+                "currency": "USD",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_uat_rev_01_delta_stock_under_tight_stock(tmp_path: Path) -> None:
+    """WidgetA 3→4 needs only +1 on the shelf; prior_items credit the first draw."""
+    pipe = _tight_widget_a_pipe(tmp_path)
+    result = pipe.process_file(_revision_file(tmp_path, 4))
+    assert result.status == "paid", f"issues={result.issues}"
+    assert pipe.inventory.stock_levels()["WidgetA"] == 0
+    events = [e for e in pipe.events.read_all() if e.get("invoice_id") == "INV-QTY"]
+    assert any(e["event_type"] == "PaymentRevised" for e in events)
+
+
+def test_uat_rev_02_delta_beyond_shelf_rejects(tmp_path: Path) -> None:
+    """WidgetA 3→5 needs +2 but one is left: reject and keep stock."""
+    pipe = _tight_widget_a_pipe(tmp_path)
+    result = pipe.process_file(_revision_file(tmp_path, 5))
+    assert result.status == "rejected"
+    assert any("insufficient_stock" in i for i in result.issues)
+    assert pipe.inventory.stock_levels()["WidgetA"] == 1
+
+
+def test_uat_twin_01_format_twin_no_second_draw(tmp_path: Path) -> None:
+    import sqlite3
+
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="case")
+    first = pipe.process_file(DATA / "invoice_1011.txt")
+    stock_after_first = pipe.inventory.stock_levels()
+    second = pipe.process_file(DATA / "invoice_1011.pdf")
+    assert (first.status, second.status) == ("paid", "paid")
+    assert pipe.inventory.stock_levels() == stock_after_first
+    with sqlite3.connect(tmp_path / "rt" / "system.db") as conn:
+        rows = conn.execute(
+            "SELECT status FROM payment_intent WHERE invoice_id='INV-1011'"
+        ).fetchall()
+    assert rows == [("SUCCEEDED",)]
