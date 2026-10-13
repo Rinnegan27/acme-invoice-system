@@ -7,6 +7,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-12
+
+### Added
+
+- Stable Galatiq case cut: wavefront pipeline, HMAC ``PaymentPermit``, CLI
+  HITL (a/r/e), live extract guardrails, stateful ledger (1× / N× seed),
+  FastAPI Control Centre, Aether Helix offline CI.
+
+### Notes
+
+- ``W-A`` → VP soft escalate; ``Widg3tA`` → hard ``unknown_item``.
+- High-value scrutiny at **≥ $10,000**. LLM text never authorizes pay.
+
 ## [1.9.1] — 2026-10-12
 
 ### Fixed
@@ -253,7 +266,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.1...v2.0.0
 [1.9.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...v1.8.0
