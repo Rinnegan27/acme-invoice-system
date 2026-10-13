@@ -35,7 +35,7 @@ These cases test whether the LLM is capable enough to resolve input variations o
 ### TC-NAME-06: High Ambiguity Multi-Collision
 * **Input Style:** `Item: W-A` | `Qty: 10`
 * **Intent:** Abbreviated strings missing vital unique layout segments.
-* **Expected Logic Path:** **VP REVIEW ESCALATION.** The LLM isolates low certainty bounds. It refuses to gamble processing execution and moves parameters to the VP loop for risk review.
+* **Expected Logic Path:** **VP REVIEW ESCALATION.** Extract keeps the abbreviation. ``CatalogResolver`` maps unique initials to ``WidgetA`` with ``sku_typo_review:W-A→WidgetA``. VP (or HITL) decides before pay.
 
 ### TC-NAME-07: Truncated Suffix String
 * **Input Style:** `Item: WidgA` | `Qty: 2`
@@ -200,7 +200,7 @@ These cases test whether the LLM is capable enough to resolve input variations o
 * **System Resolution:** Database connection routines utilize parametrized variable sets exclusively. String parameters are safely parsed as raw text variables, preserving database integrity.
 ---
 
-## 5. User journey (1.8.0+)
+## 5. User journey (1.9.0+)
 
 Flow: **Capture → Validate → HITL / VP → Pay / Reject.**
 
@@ -208,7 +208,7 @@ Flow: **Capture → Validate → HITL / VP → Pay / Reject.**
 | --- | --- | --- |
 | Capture | Parse file. Raw `Qty` markers (`~`, float) fail closed. Digit SKUs stay raw. | `IngestionFailed`, no stock draw |
 | Validate | Catalog, stock (with `prior_items` credit), math, soft findings. | Hard issue → reject |
-| HITL / VP | High value (>$10k) or soft finding → human gate or VP agent. | approve / reject / escalate |
+| HITL / VP | High value (≥$10k) or soft finding → human gate or VP agent. | approve / reject / escalate |
 | Pay / Reject | `PaymentPermit` (HMAC) is required. LLM text never pays. | Permit or reject |
 
 Offline tests use `Pipeline(human_gate=lambda _inv: "approve" | "reject" | "escalate")`.
@@ -226,7 +226,8 @@ Live runs are manual. CI stays on `--llm=stub`.
 | TC-HITL-06 | HITL escalate (soft) | `Widget Alpha` | **paid** via VP agent |
 | TC-HITL-07 | No gate when clean | $1,250 `WidgetA` ×5 | **paid**, gate not called |
 | TC-HITL-08 | No gate on hard reject | $12,500 `WidgetB` ×25 | **rejected** `insufficient_stock`, gate not called |
-| TC-GUARD-01 | Digit SKU reject | `Item: Widg3tA` | **rejected** `unknown_item` |
+| TC-GUARD-01 | Digit SKU reject | `Item: Widg3tA` | **rejected** `unknown_item` (not VP) |
+| TC-GUARD-01b | Abbrev soft VP | `Item: W-A` | `sku_typo_review:W-A→WidgetA`, VP approves, **paid** |
 | TC-GUARD-02 | Qty `~5` fail closed | `Qty: ~5` | **failed**, `invalid_quantity`, no draw |
 | TC-GUARD-03 | Float qty fail closed | `Qty: 5.0000001` | **failed**, `invalid_quantity`, no draw |
 | TC-GUARD-04 | Widget Alpha soft VP | `Item: Widget Alpha` | soft finding, VP approves, **paid** |

@@ -21,7 +21,18 @@ HumanAction = Literal["approve", "reject", "escalate"]
 
 
 def needs_human_or_vp_gate(invoice: Invoice) -> bool:
-    """Return True when high-value or soft escalations require scrutiny."""
+    """Return True when high-value or soft escalations require scrutiny.
+
+    Parameters
+    ----------
+    invoice : Invoice
+        Validated invoice (may carry soft issues).
+
+    Returns
+    -------
+    bool
+        True when amount ≥ $10k or soft escalations are present.
+    """
     _hard, soft = partition_soft_escalation_issues(invoice.issues)
     return bool(invoice.is_high_value or soft)
 
@@ -111,7 +122,13 @@ def prompt_human_approval(invoice: Invoice) -> HumanAction:
 
 
 def make_cli_human_gate() -> Callable[[Invoice], HumanAction]:
-    """Return a gate callable bound to :func:`prompt_human_approval`."""
+    """Build a Pipeline ``human_gate`` that prompts on the CLI.
+
+    Returns
+    -------
+    callable
+        ``(invoice) -> HumanAction`` bound to :func:`prompt_human_approval`.
+    """
 
     def _gate(invoice: Invoice) -> HumanAction:
         return prompt_human_approval(invoice)

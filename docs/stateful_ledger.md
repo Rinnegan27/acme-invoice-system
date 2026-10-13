@@ -14,11 +14,11 @@ Sequential live-Grok run over the Galatiq case invoice set ([data/invoices](http
 | Step | File | Format | Invoice ID | Status | Issues / notes | Stock delta | Resulting DB state |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **0** | — | — | — | seed | Case brief inventory seed ×1 | — | `WidgetA: 15`, `WidgetB: 10`, `GadgetX: 5`, `FakeItem: 0` |
-| **1** | `invoice_1001.txt` | **TXT** | **INV-1001** | `paid` | Auto-approved under $10k after validation (policy gate) | WidgetA-10, WidgetB-5 | `WidgetA: 5`, `WidgetB: 5`, `GadgetX: 5`, `FakeItem: 0` |
+| **1** | `invoice_1001.txt` | **TXT** | **INV-1001** | `paid` | Auto-approved under $10k threshold | WidgetA-10, WidgetB-5 | `WidgetA: 5`, `WidgetB: 5`, `GadgetX: 5`, `FakeItem: 0` |
 | **2** | `invoice_1002.txt` | **TXT** | **INV-1002** | `rejected` | insufficient_stock:GadgetX | no stock change | `WidgetA: 5`, `WidgetB: 5`, `GadgetX: 5`, `FakeItem: 0` |
 | **3** | `invoice_1003.txt` | **TXT** | **INV-1003** | `rejected` | zero_stock:FakeItem | no stock change | `WidgetA: 5`, `WidgetB: 5`, `GadgetX: 5`, `FakeItem: 0` |
-| **4** | `invoice_1004.json` | **JSON** | **INV-1004** | `paid` | Auto-approved under $10k after validation (policy gate) | WidgetA-3, WidgetB-2 | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 5`, `FakeItem: 0` |
-| **5** | `invoice_1004_revised.json` | **JSON** | **INV-1004** | `paid` | Auto-approved under $10k after validation (policy gate) | GadgetX-5 | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
+| **4** | `invoice_1004.json` | **JSON** | **INV-1004** | `paid` | Auto-approved under $10k threshold | WidgetA-3, WidgetB-2 | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 5`, `FakeItem: 0` |
+| **5** | `invoice_1004_revised.json` | **JSON** | **INV-1004** | `paid` | Auto-approved under $10k threshold | GadgetX-5 | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **6** | `invoice_1005.json` | **JSON** | **INV-1005** | `rejected` | insufficient_stock:WidgetA, zero_stock:GadgetX, insufficient_stock:WidgetB | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **7** | `invoice_1006.csv` | **CSV** | **INV-1006** | `rejected` | insufficient_stock:WidgetA | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **8** | `invoice_1007.csv` | **CSV** | **INV-1007** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
@@ -27,8 +27,8 @@ Sequential live-Grok run over the Galatiq case invoice set ([data/invoices](http
 | **11** | `invoice_1010.txt` | **TXT** | **INV-1010** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **12** | `invoice_1011.txt` | **TXT** | **INV-1011** | `rejected` | insufficient_stock:WidgetA | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **13** | `invoice_1011.pdf` | **PDF** | **INV-1011** | `rejected` | insufficient_stock:WidgetA | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
-| **14** | `invoice_1012.txt` | **TXT** | **INV-1012** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
-| **15** | `invoice_1012.pdf` | **PDF** | **INV-1012** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
+| **14** | `invoice_1012.txt` | **TXT** | **INV-1012** | `rejected` | insufficient_stock:WidgetB, insufficient_stock:WidgetA, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
+| **15** | `invoice_1012.pdf` | **PDF** | **INV-1012** | `rejected` | insufficient_stock:WidgetB, insufficient_stock:WidgetA, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **16** | `invoice_1013.json` | **JSON** | **INV-1013** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **17** | `invoice_1013.pdf` | **PDF** | **INV-1013** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB, zero_stock:GadgetX | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |
 | **18** | `invoice_1014.xml` | **XML** | **INV-1014** | `rejected` | insufficient_stock:WidgetA, insufficient_stock:WidgetB | no stock change | `WidgetA: 2`, `WidgetB: 3`, `GadgetX: 0`, `FakeItem: 0` |

@@ -7,6 +7,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.1] — 2026-10-12
+
+### Fixed
+
+- Operator docs: high-value threshold wording is **≥ $10,000** (matches
+  ``Invoice.is_high_value``), not “over $10k”.
+- UAT journey catalog documents ``W-A`` VP soft escalate next to ``Widg3tA``
+  hard reject; TC-NAME-06 narrative matches ``CatalogResolver`` initials path.
+
+### Changed
+
+- NumPy docstrings on ``needs_human_or_vp_gate``, ``make_cli_human_gate``,
+  ``resolve_line_items``; abbrev note on ``soft_issues_from_source_items``.
+- Live CLI VP check script tolerates a missing ``.env`` (uses process env).
+
 ## [1.9.0] — 2026-10-12
 
 ### Changed
@@ -238,7 +253,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.0...v1.7.1

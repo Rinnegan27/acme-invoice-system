@@ -13,18 +13,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-for line in (ROOT / ".env").read_text().splitlines():
-    if not line.strip() or line.strip().startswith("#") or "=" not in line:
-        continue
-    k, v = line.split("=", 1)
-    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+_env = ROOT / ".env"
+if _env.is_file():
+    for line in _env.read_text().splitlines():
+        if not line.strip() or line.strip().startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 os.environ.setdefault("GALATIQ_CLI_AUTO_VP", "1")
 os.environ.setdefault("GALATIQ_PROFILE", "case")
 
 from invoice_automation.orchestration.pipeline import Pipeline  # noqa: E402
 
-OUT = ROOT / "docs" / "release_190_e2e"
+OUT = ROOT / "docs" / "isolated_vp_check"
 OUT.mkdir(parents=True, exist_ok=True)
 
 CASES: list[tuple[str, str, str]] = [

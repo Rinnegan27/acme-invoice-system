@@ -1,4 +1,4 @@
-# Operator journey (1.9.0)
+# Operator journey (1.9.1)
 
 Follow these steps for each invoice.
 
@@ -7,7 +7,7 @@ Follow these steps for each invoice.
 2. **Check the quantity.** `Qty: ~5` and `Qty: 5.5` stop the run. Fix the source file.
 3. **Validate.** The system checks the SKU, stock, price, and totals.
    Digit OCR SKUs (for example `Widg3tA`) are hard-rejected — not a VP path.
-4. **Scrutiny.** An invoice over $10,000 needs approval.
+4. **Scrutiny.** An invoice at or over $10,000 needs approval.
    Soft findings need approval too (`W-A`, `Widget Alpha`).
 5. **Decide.** In a TTY, the CLI asks `a / r / e / q`.
    - `a`: you approve. The system pays with a permit.

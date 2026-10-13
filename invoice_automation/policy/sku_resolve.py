@@ -355,6 +355,7 @@ def soft_issues_from_source_items(
     -----
     Exact compact matches (``Widget A`` → ``WidgetA``) stay silent auto-pay.
     Alias / unique-close phrases (``Widget Alpha`` → ``WidgetA``) escalate.
+    Short unique-initial abbreviations (``W-A`` → ``WidgetA``) escalate too.
     """
     resolver = CatalogResolver(catalog or DEFAULT_CATALOG)
     present = {item.sku for item in items}
@@ -461,7 +462,20 @@ def resolve_line_items(
     items: Sequence[LineItem],
     catalog: Sequence[str] | None = None,
 ) -> tuple[tuple[LineItem, ...], list[str]]:
-    """Resolve all line SKUs; return updated items and soft escalation issues."""
+    """Resolve all line SKUs; collect soft escalation issues for VP.
+
+    Parameters
+    ----------
+    items : sequence of LineItem
+        Extracted lines (SKUs may be raw or already catalog codes).
+    catalog : sequence of str or None
+        Catalog codes. Defaults to case-seed SKUs.
+
+    Returns
+    -------
+    tuple of (tuple of LineItem, list of str)
+        Resolved items and unique soft issue codes (may be empty).
+    """
     resolver = CatalogResolver(catalog or DEFAULT_CATALOG)
     out: list[LineItem] = []
     soft: list[str] = []
