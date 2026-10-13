@@ -7,6 +7,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-10-12
+
+### Changed
+
+- Short catalog abbreviations with unique initials (``W-A`` → ``WidgetA``)
+  soft-escalate to VP (``sku_typo_review``) instead of hard ``unknown_item``.
+  Digit OCR / leet SKUs (``Widg3tA``) stay hard-reject and never enter VP.
+- README: scenario check matrix (case table, UAT name/VP, 1× ledger DB) and
+  mermaid state flowchart.
+
+### Added
+
+- Live CLI VP check script ``scripts/run_cli_vp_live_check.py``
+  (clean auto / Widg3tA hard / W-A VP / HV VP).
+
 ## [1.8.0] — 2026-10-12
 
 ### Added
@@ -223,7 +238,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Rinnegan27/galatiq-invoice-system/compare/v1.6.0...v1.7.0

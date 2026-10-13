@@ -96,8 +96,9 @@ Catalog SKU intelligence (user message lists the live catalog):
   map to the base catalog code and mention sku_variant in notes.
 - Never expand short abbreviations or initials (about 1–3 letters, with or
   without hyphens) into catalog codes. Keep the abbreviation as sku unchanged
-  (e.g. do not turn W-A into WidgetA). Mention abbreviation in notes.
-- Never map digit-bearing OCR/leet tokens (e.g. Widg3tA) to a catalog SKU.
+  (e.g. leave W-A as W-A). Downstream resolver may soft-escalate to VP.
+- Never map digit-bearing OCR/leet tokens (e.g. Widg3tA) to a catalog SKU
+  (hard unknown — not a VP typo fix).
   Keep the raw token as sku.
 - Never invent SKUs that are neither on the document nor in the catalog.
 - Put rush/expedite notes in notes, not in sku.

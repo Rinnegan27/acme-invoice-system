@@ -103,12 +103,12 @@ class IngestionWorker:
                 undo_digit_sku_expansions,
             )
 
-            # Undo LLM over-expansion of short abbreviations (W-A ≠ WidgetA).
+            # Undo silent LLM abbrev expansion; resolver re-maps with VP soft escalate.
             items = undo_abbreviation_expansions(raw, result.invoice.items)
-            # Digit-bearing source tokens are not fat-finger fixes (Widg3tA ≠ WidgetA).
+            # Digit-bearing source tokens are not fat-finger fixes (Widg3tA → hard reject).
             items = undo_digit_sku_expansions(raw, items)
             resolved_items, resolve_soft = resolve_line_items(items)
-            # Alias / unique-close Item: phrases escalate to VP (Widget Alpha).
+            # Alias / abbrev / unique-close Item: phrases escalate to VP (W-A, Widget Alpha).
             source_soft = soft_issues_from_source_items(raw, resolved_items)
             soft = list(dict.fromkeys([*resolve_soft, *source_soft]))
             prior_issues = list(result.invoice.issues)

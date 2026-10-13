@@ -28,8 +28,9 @@ _ILLEGAL_CHAR = re.compile(r"[^A-Za-z0-9._\s-]")
 
 # Relative edit-distance ceiling for a unique fuzzy match.
 _REL_DIST_MAX = 0.34
-# Compact forms at or below this length are abbreviations, not catalog codes.
-# They must never auto-resolve via initials/prefix (e.g. W-A is not WidgetA).
+# Compact forms at or below this length are abbreviations, not silent catalog codes.
+# Unique initials map with UNIQUE_CLOSE → VP soft escalate (W-A → WidgetA).
+# Digit OCR tokens (Widg3tA) never take this path — they stay unknown_item.
 _ABBREV_MAX_LEN = 3
 _ITEM_LINE = re.compile(r"(?im)^\s*Item\s*:\s*([^\n]+)")
 
@@ -177,8 +178,22 @@ class CatalogResolver:
                 candidates=tuple(ties),
             )
 
-        # Short abbreviations are not catalog SKUs (W-A ≠ WidgetA). Leave raw.
+        # Short abbreviations: unique initials → VP soft escalate (not silent auto-pay).
+        # Example: W-A → WidgetA (UNIQUE_CLOSE). Ambiguous or unmatched → leave raw.
         if len(compact) <= _ABBREV_MAX_LEN:
+            init_hits = [sku for sku in self.catalog if _initials(sku) == compact]
+            if len(init_hits) == 1:
+                return CatalogMatch(
+                    resolved=init_hits[0],
+                    confidence=MatchConfidence.UNIQUE_CLOSE,
+                    candidates=(init_hits[0],),
+                )
+            if len(init_hits) > 1:
+                return CatalogMatch(
+                    resolved=init_hits[0],
+                    confidence=MatchConfidence.AMBIGUOUS,
+                    candidates=tuple(init_hits),
+                )
             return CatalogMatch(resolved=text, confidence=MatchConfidence.NONE)
 
         # Unique close fuzzy (fat-finger / truncation / phonetic spacing).
@@ -382,9 +397,10 @@ def undo_abbreviation_expansions(
 
     Notes
     -----
-    Generic rule: compact forms ≤ 3 characters on the document are not catalog
-    identities. If extract mapped them to a catalog SKU via initials/prefix,
-    restore the raw token so validation can treat them as unknown.
+    Compact forms ≤ 3 characters are restored to the document token when the
+    model over-expanded them. ``CatalogResolver`` then maps unique initials
+    with ``UNIQUE_CLOSE`` so VP reviews (``W-A`` → ``WidgetA``). Digit OCR
+    tokens use ``undo_digit_sku_expansions`` instead and stay hard-reject.
     """
     cat = set(catalog or DEFAULT_CATALOG)
     shorts: list[str] = []

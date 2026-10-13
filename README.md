@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.8.0"><img alt="Version" src="https://img.shields.io/badge/version-1.8.0-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/galatiq-invoice-system/releases/tag/v1.9.0"><img alt="Version" src="https://img.shields.io/badge/version-1.9.0-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
   <a href="https://github.com/Rinnegan27/galatiq-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
@@ -33,12 +33,13 @@
 7. [What this system does](#-what-this-system-does)
 8. [Case brief compliance](#-case-brief-compliance-detail)
 9. [Control Centre](#-how-to-use-the-control-centre)
-10. [Architecture](#-architecture)
-11. [Project layout](#-project-layout)
-12. [Tech used](#-tech-used)
-13. [Evaluation criteria](#-evaluation-criteria)
-14. [Requirements map](#-how-this-solution-meets-the-requirements)
-15. [Changelog and releases](#-changelog-and-releases)
+10. [Architecture & state flowchart](#️-architecture--state-flowchart)
+11. [Scenario checks](#-scenario-checks)
+12. [Project layout](#-project-layout)
+13. [Tech used](#-tech-used)
+14. [Evaluation criteria](#-evaluation-criteria)
+15. [Requirements map](#-how-this-solution-meets-the-requirements)
+16. [Changelog and releases](#-changelog-and-releases)
 
 ---
 
@@ -361,18 +362,31 @@ Case Lab: [http://localhost:8000/sim](http://localhost:8000/sim) (not in product
 
 ---
 
-## 🏛️ Architecture
+## 🏛️ Architecture & state flowchart
 
 This project uses a custom multi-stage pipeline with an **explicit stage graph** (wavefront drain). It uses SQLite queues, a workbench, optional Grok, and a non-LLM PaymentPermit fence. It is not LangGraph.
 
 Full diagram + OTel export path: [docs/architecture.md](docs/architecture.md).
 
-```text
-Invoice files
-  → ingestion → validation ─┬→ REJECT
-                            └→ approval ─┬→ REJECT
-                                         └→ payment → PAID | RECONCILE
+```mermaid
+flowchart LR
+  START([Invoice file]) --> ING[Ingestion]
+  ING -->|extracted| VAL[Validation]
+  VAL -->|hard issues| REJ[REJECT]
+  VAL -->|clean or soft only| APP[Approval / HITL]
+  APP -->|reject| REJ
+  APP -->|approve + PaymentPermit| PAY[Payment]
+  PAY -->|gateway + stock OK| PAID[PAID]
+  PAY -->|gateway OK / stock fail| REC[RECONCILE]
 ```
+
+| Path | Trigger | Stock DB |
+|------|---------|----------|
+| Auto-pay | Clean, amount &lt; $10k, no soft issues | Full line decrement |
+| VP / HITL | Amount ≥ $10k **or** soft issue (`sku_typo_review`, alias, abbrev `W-A`, …) | Decrement only after permit + pay |
+| Hard reject | `unknown_item` (e.g. `Widg3tA`), `zero_stock`, bad qty, … | **No** stock write |
+| Revision | Same `invoice_id`, new content hash | Delta only (`prior_items` credit) |
+| Format twin | Same content, other file type | **No** second draw |
 
 CLI/sim **stdout** is one JSON document. Logs (including live httpx) go to **stderr**.
 
@@ -385,6 +399,62 @@ CLI/sim **stdout** is one JSON document. Logs (including live httpx) go to **std
 - One orchestration path runs through `Pipeline.drain`.
 - Grok auth failures fail closed. Due dates from Grok are kept.
 - CI uses `uv sync --frozen` plus ruff and offline pytest.
+
+---
+
+## ✅ Scenario checks
+
+Seed (case brief): **WidgetA 15 · WidgetB 10 · GadgetX 5 · FakeItem 0**.
+
+### Case README table (fresh inventory each file)
+
+Live Grok + `--profile=case`. Harness: process each file alone against a reseeded DB.
+
+| File | Expected | Typical issues / notes |
+|------|----------|------------------------|
+| `invoice_1001.txt` | `paid` | Clean STP; A−10 B−5 |
+| `invoice_1002.txt` | `rejected` | `insufficient_stock:GadgetX` @ 1× seed |
+| `invoice_1003.txt` | `rejected` | `zero_stock:FakeItem` |
+| `invoice_1004.json` | `paid` | A−3 B−2 |
+| `invoice_1006.csv` | `paid` | A−5 B−3 |
+| `invoice_1008.txt` | `rejected` | `unknown_item` SuperGizmo / MegaSprocket |
+| `invoice_1009.json` | `rejected` | invalid qty / negative amount / missing vendor |
+| `invoice_1016.json` | `rejected` | `unknown_item:WidgetC` |
+
+Offline proof: `make scenario-proof` → `docs/scenario_proof.*`. Sim: `uv run python main.py --sim=case --llm=stub`.
+
+### Stateful ledger (shared DB, original 1× seed)
+
+```bash
+STOCK_MULT=1 make ledger-live   # or: LEDGER_LLM=stub make ledger
+```
+
+| Checkpoint | DB after |
+|------------|----------|
+| T₀ seed | A15 B10 X5 F0 |
+| After 1001 paid | A5 B5 X5 F0 |
+| After 1002 reject | unchanged (overstock) |
+| After 1004 + revised | A2 B3 X0 (revision draws GadgetX−5 only) |
+| Terminal (20 files) | A2 B3 X0 F0 — never negative |
+
+Full matrix: [docs/stateful_ledger.md](docs/stateful_ledger.md). At **15×** seed the same sequence stays non-negative with more pays (`make ledger-live` default).
+
+### Name / VP path checks (UAT)
+
+| Case | Input | Path | Outcome |
+|------|-------|------|---------|
+| TC-NAME-02 | `Widg3tA` | **Hard reject** (not VP) | `unknown_item` |
+| TC-NAME-06 | `W-A` | **VP soft escalate** | `sku_typo_review:W-A→WidgetA` → pay after VP |
+| TC-NAME-08 | `Widget Alpha` | **VP soft escalate** | typo review → pay after VP |
+| High value ≥ $10k | clean HV body | **VP / HITL** | pay only with permit |
+
+```bash
+make uat                                          # offline stub
+uv run python scripts/run_uat_live_grok.py        # live Grok
+uv run python scripts/run_cli_vp_live_check.py    # CLI VP matrix
+```
+
+Operator walkthrough: [docs/user_journey.md](docs/user_journey.md). Full UAT catalog: [docs/uat_test_cases.md](docs/uat_test_cases.md).
 
 ---
 
@@ -479,7 +549,7 @@ This build covers the full Galatiq case surface.
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | 🏷️ Releases | https://github.com/Rinnegan27/galatiq-invoice-system/releases |
 
-Current package version: **1.8.0** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **1.9.0** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 

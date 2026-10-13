@@ -99,7 +99,7 @@ def _run(tmp: Path, name: str, body: str):
             Unit Price: $250
             Total: $2500
             """,
-            "rejected",  # short abbreviations are not catalog SKUs
+            "paid",  # W-A → WidgetA soft escalate; stub VP approves
         ),
         (
             "TC-NAME-07",

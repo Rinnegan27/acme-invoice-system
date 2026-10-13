@@ -13,6 +13,8 @@ from invoice_automation.domain.models import LineItem
 from invoice_automation.orchestration.pipeline import Pipeline
 from invoice_automation.policy.invariants import VENDOR_INJECTION_REVIEW_PREFIX
 from invoice_automation.policy.sku_resolve import (
+    CatalogResolver,
+    MatchConfidence,
     soft_issues_from_source_items,
     undo_digit_sku_expansions,
 )
@@ -46,6 +48,30 @@ def test_soft_issues_widget_a_exact_stays_silent() -> None:
     items = (LineItem("WidgetA", 5, Decimal("250")),)
     soft = soft_issues_from_source_items(raw, items)
     assert soft == []
+
+
+def test_abbrev_wa_unique_close_for_vp() -> None:
+    match = CatalogResolver(("WidgetA", "WidgetB", "GadgetX", "FakeItem")).resolve("W-A")
+    assert match.confidence is MatchConfidence.UNIQUE_CLOSE
+    assert match.resolved == "WidgetA"
+
+
+def test_pipeline_wa_pays_via_vp(tmp_path: Path) -> None:
+    path = tmp_path / "n06.txt"
+    path.write_text(
+        "Invoice Number: INV-9106\nVendor: Abbrev Co\nItem: W-A\n"
+        "Qty: 10\nUnit Price: $250\nTotal: $2500\n",
+        encoding="utf-8",
+    )
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="case")
+    result = pipe.process_file(path)
+    assert result.status == "paid"
+    events = pipe.events.read_all()
+    validated = next(e for e in events if e["event_type"] == "InvoiceValidated")
+    soft = validated["payload"].get("soft_escalations") or []
+    assert any("sku_typo_review" in str(s) and "W-A" in str(s) for s in soft)
+    approved = next(e for e in events if e["event_type"] == "InvoiceApproved")
+    assert approved["payload"].get("reflected") is True
 
 
 def test_pipeline_widg3ta_rejects(tmp_path: Path) -> None:

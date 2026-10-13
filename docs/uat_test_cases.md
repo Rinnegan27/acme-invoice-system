@@ -200,7 +200,7 @@ These cases test whether the LLM is capable enough to resolve input variations o
 * **System Resolution:** Database connection routines utilize parametrized variable sets exclusively. String parameters are safely parsed as raw text variables, preserving database integrity.
 ---
 
-## 5. User journey (1.8.0)
+## 5. User journey (1.8.0+)
 
 Flow: **Capture → Validate → HITL / VP → Pay / Reject.**
 

@@ -92,8 +92,8 @@ Total: $1000
     ),
     (
         "TC-NAME-06",
-        "FLAG (abbrev ≠ catalog)",
-        "flag",
+        "VP REVIEW ESCALATION",
+        "vp",
         """
 Invoice Number: INV-9106
 Vendor: Abbrev Co
