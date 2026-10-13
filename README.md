@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinnegan27/acme-invoice-system/releases/tag/v2.0.1"><img alt="Version" src="https://img.shields.io/badge/version-2.0.1-0ea5e9?style=for-the-badge"></a>
+  <a href="https://github.com/Rinnegan27/acme-invoice-system/releases/tag/v2.0.2"><img alt="Version" src="https://img.shields.io/badge/version-2.0.2-0ea5e9?style=for-the-badge"></a>
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"></a>
   <a href="https://github.com/Rinnegan27/acme-invoice-system/actions"><img alt="CI" src="https://img.shields.io/badge/CI-Aether%20Helix-22c55e?style=for-the-badge"></a>
   <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/packaging-uv-de5fe9?style=for-the-badge"></a>
@@ -549,7 +549,7 @@ This build covers the full case surface.
 | 📝 Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | 🏷️ Releases | https://github.com/Rinnegan27/acme-invoice-system/releases |
 
-Current package version: **2.0.1** (`pyproject.toml` and `invoice_automation.__version__`).
+Current package version: **2.0.2** (`pyproject.toml` and `invoice_automation.__version__`).
 
 ---
 

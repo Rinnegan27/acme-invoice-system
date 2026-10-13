@@ -1,4 +1,4 @@
-# Operator journey (1.9.1)
+# Operator journey (2.0.2)
 
 Follow these steps for each invoice.
 
@@ -15,7 +15,12 @@ Follow these steps for each invoice.
    - `e`: the VP agent decides.
 6. **Skip the prompt.** Use `--auto-vp` or `GALATIQ_CLI_AUTO_VP=1` in CI or pipes.
 7. **Pay or reject.** Payment needs an HMAC `PaymentPermit`. LLM text cannot pay.
-8. **Revisions.** A new file with the same invoice ID pays only the stock delta.
-   A format twin (same data, other file type) does not draw stock twice.
+   In `prod`, a catalog price far off (for example 10x) is `price_mismatch`. It does not pay.
+8. **Reconcile.** If the gateway pays but the stock draw fails, the status is `reconcile`.
+   The permit stays unused. Open **Reconcile** in the workbench to retry stock or ack.
+9. **Revisions.** A new file with the same invoice ID pays only the stock delta.
+   Example: `invoice_1004.json`, then `invoice_1004_revised.json` draws only `GadgetX` ×5.
+10. **Format twins.** Same data in another file type (`invoice_1011.txt`, then `.pdf`)
+    pays once. It does not draw stock twice.
 
 See `docs/uat_test_cases.md` section 5 for the test IDs.

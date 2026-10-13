@@ -809,3 +809,115 @@ def test_uat_twin_01_format_twin_no_second_draw(tmp_path: Path) -> None:
             "SELECT status FROM payment_intent WHERE invoice_id='INV-1011'"
         ).fetchall()
     assert rows == [("SUCCEEDED",)]
+
+
+def _db_rows(tmp: Path, sql: str, args: tuple = ()) -> list:
+    import sqlite3
+
+    with sqlite3.connect(tmp / "rt" / "system.db") as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+def test_uat_recon_01_gateway_ok_stock_fail_holds_permit(tmp_path: Path) -> None:
+    """Gateway pays, stock draw fails: RECONCILE, intent held, permit not consumed."""
+    from invoice_automation.domain.exceptions import ValidationError
+
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="case")
+
+    def _fail(_items):
+        raise ValidationError("insufficient_stock:GadgetX")
+
+    pipe.inventory.decrement_stock = _fail  # type: ignore[method-assign]
+    path = _write(
+        tmp_path,
+        "TC-RECON-01.txt",
+        """
+        Invoice Number: INV-9601
+        Vendor: Recon Co
+        Item: GadgetX
+        Qty: 1
+        Unit Price: $100
+        Total: $100
+        """,
+    )
+    result = pipe.process_file(path)
+    assert result.status == "reconcile", f"issues={result.issues} reason={result.approval_reason}"
+    types = [e["event_type"] for e in pipe.events.read_all() if e.get("invoice_id") == "INV-9601"]
+    assert "PaymentStockReconcile" in types
+    assert "PaymentSucceeded" not in types
+    assert _db_rows(tmp_path, "SELECT COUNT(*) FROM consumed_permits") == [(0,)]
+    assert _db_rows(
+        tmp_path,
+        "SELECT status, needs_manual_reconciliation FROM payment_intent WHERE invoice_id=?",
+        ("INV-9601",),
+    ) == [("RECONCILE", 1)]
+    assert [r["invoice_id"] for r in pipe.saga.list_reconcile_intents()] == ["INV-9601"]
+    assert pipe.inventory.stock_levels()["GadgetX"] == 5  # no draw happened
+
+
+def test_uat_case_rev_01_real_1004_revision_delta_stock(tmp_path: Path) -> None:
+    """invoice_1004 then its R1 revision: only the added GadgetX×5 draws stock."""
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="case")
+    start = pipe.inventory.stock_levels()
+    first = pipe.process_file(DATA / "invoice_1004.json")
+    assert first.status == "paid", f"issues={first.issues}"
+    after_first = pipe.inventory.stock_levels()
+    assert after_first["WidgetA"] == start["WidgetA"] - 3
+    assert after_first["WidgetB"] == start["WidgetB"] - 2
+    assert after_first["GadgetX"] == start["GadgetX"]
+
+    second = pipe.process_file(DATA / "invoice_1004_revised.json")
+    assert second.status == "paid", f"issues={second.issues} reason={second.approval_reason}"
+    after_second = pipe.inventory.stock_levels()
+    assert after_second["WidgetA"] == after_first["WidgetA"]  # no second draw
+    assert after_second["WidgetB"] == after_first["WidgetB"]
+    assert after_second["GadgetX"] == start["GadgetX"] - 5  # only the delta
+    events = [e for e in pipe.events.read_all() if e.get("invoice_id") == "INV-1004"]
+    assert any(e["event_type"] == "PaymentRevised" for e in events)
+    assert _db_rows(
+        tmp_path, "SELECT status FROM payment_intent WHERE invoice_id=?", ("INV-1004",)
+    ) == [("SUCCEEDED",)]
+
+
+def test_uat_case_twin_01_real_1011_txt_then_pdf(tmp_path: Path) -> None:
+    """invoice_1011 txt then pdf on one Pipeline: both paid, one intent, one draw."""
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="case")
+    start = pipe.inventory.stock_levels()
+    first = pipe.process_file(DATA / "invoice_1011.txt")
+    after_first = pipe.inventory.stock_levels()
+    second = pipe.process_file(DATA / "invoice_1011.pdf")
+    assert (first.status, second.status) == ("paid", "paid")
+    assert after_first != start  # first file drew stock
+    assert pipe.inventory.stock_levels() == after_first  # twin did not draw again
+    assert _db_rows(
+        tmp_path, "SELECT status FROM payment_intent WHERE invoice_id=?", ("INV-1011",)
+    ) == [("SUCCEEDED",)]
+    paid = [
+        e
+        for e in pipe.events.read_all()
+        if e.get("invoice_id") == "INV-1011"
+        and e["event_type"] in {"PaymentSucceeded", "PaymentRevised"}
+    ]
+    assert not any(e["payload"].get("revision") for e in paid)
+
+
+def test_uat_prod_01_absurd_unit_price_not_paid(tmp_path: Path) -> None:
+    """Profile=prod: a 10x catalog unit price must not pay silently."""
+    path = _write(
+        tmp_path,
+        "TC-PROD-01.txt",
+        """
+        Invoice Number: INV-9701
+        Vendor: Gouge Co
+        Item: WidgetA
+        Qty: 1
+        Unit Price: $2500
+        Total: $2500
+        """,
+    )
+    pipe = Pipeline(work_dir=tmp_path / "rt", use_grok=False, profile="prod")
+    result = pipe.process_file(path)
+    assert result.status != "paid", f"silent pay: {result.status}"
+    blob = " ".join(result.issues) + " " + (result.approval_reason or "")
+    assert "price_mismatch" in blob
+    assert pipe.inventory.stock_levels()["WidgetA"] == 15

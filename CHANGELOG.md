@@ -7,6 +7,16 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-10-12
+
+### Added
+
+- UAT journey: ``TC-RECON-01`` (pay/stock reconcile hold), ``TC-CASE-REV-01``
+  (real 1004 revision delta), ``TC-CASE-TWIN-01`` (1011 txt/pdf twin),
+  ``TC-PROD-01`` (prod absurd price reject). Live UAT script covers case
+  rev/twin sequences.
+
+
 ## [2.0.1] — 2026-10-12
 
 ### Changed
@@ -273,7 +283,8 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Product UI is FastAPI. Streamlit `ui/` is deprecated.
 - Orchestration is a custom queue pipeline. It is not LangGraph.
 
-[Unreleased]: https://github.com/Rinnegan27/acme-invoice-system/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/Rinnegan27/acme-invoice-system/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/Rinnegan27/acme-invoice-system/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.9.1...v2.0.0
 [1.9.1]: https://github.com/Rinnegan27/acme-invoice-system/compare/v1.9.0...v1.9.1

@@ -235,6 +235,13 @@ Live runs are manual. CI stays on `--llm=stub`.
 | TC-REV-01 | Revision delta stock | `INV-QTY` WidgetA 3→4, 1 left | **paid**, stock 1→0, `PaymentRevised` |
 | TC-REV-02 | Revision beyond shelf | `INV-QTY` WidgetA 3→5, 1 left | **rejected** `insufficient_stock`, stock kept |
 | TC-TWIN-01 | Format twin | `invoice_1011.txt` then `.pdf` | both **paid**, one `payment_intent`, no second draw |
+| TC-CASE-REV-01 | Real-file revision | `invoice_1004.json` then `invoice_1004_revised.json`, same Pipeline | both **paid**, `PaymentRevised`, only `GadgetX` ×5 drawn |
+| TC-CASE-TWIN-01 | Real-file twin | `invoice_1011.txt` then `.pdf`, same Pipeline | both **paid**, one `SUCCEEDED` intent, stock unchanged by the twin |
+| TC-RECON-01 | Pay OK, stock fail | Gateway succeeds, stock draw raises | **reconcile**, intent `RECONCILE`, `PaymentStockReconcile`, permit **not** consumed, no draw |
+| TC-PROD-01 | Prod price guard | `WidgetA` ×1 at $2,500 (catalog $250), `profile=prod` | not **paid**, `price_mismatch:WidgetA` |
+
+`scripts/run_uat_live_grok.py` also runs TC-CASE-REV-01 and TC-CASE-TWIN-01 with live Grok.
+TC-RECON-01 and TC-PROD-01 are offline only. TTY-only HITL stays manual.
 
 Tests: `tests/test_uat_scenarios.py` (section 5), with `tests/test_cli_hitl.py` and
 `tests/test_live_guardrails.py` for unit-level checks.

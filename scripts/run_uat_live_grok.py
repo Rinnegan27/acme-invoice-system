@@ -23,8 +23,9 @@ for line in (ROOT / ".env").read_text().splitlines():
 from invoice_automation.orchestration.pipeline import Pipeline  # noqa: E402
 
 OUT = ROOT / "docs" / "uat_live_grok_results.jsonl"
+DATA = ROOT / "data" / "invoices"
 
-CASES: list[tuple[str, str, str, str]] = [
+CASES: list[tuple[str, str, str, str | tuple[str, ...]]] = [
     (
         "TC-NAME-01",
         "PASS (Auto-Fix)",
@@ -502,10 +503,57 @@ Unit Price: $250
 Total: $250
 """,
     ),
+    # Real-file sequences on one Pipeline (same work_dir). Body is a tuple of file names.
+    (
+        "TC-CASE-REV-01",
+        "PASS (revision delta)",
+        "paid",
+        ("invoice_1004.json", "invoice_1004_revised.json"),
+    ),
+    (
+        "TC-CASE-TWIN-01",
+        "PASS (twin, no 2nd draw)",
+        "paid",
+        ("invoice_1011.txt", "invoice_1011.pdf"),
+    ),
 ]
 
 
-def run_one(tc_id: str, body: str, *, soft_bands: bool) -> dict:
+def run_seq(tc_id: str, names: tuple[str, ...]) -> dict:
+    """Process real data files in order on one Pipeline; check stock deltas."""
+    with tempfile.TemporaryDirectory() as d:
+        pipe = Pipeline(work_dir=Path(d) / "run", use_grok=True, profile="case")
+        start = pipe.inventory.stock_levels()
+        t0 = time.perf_counter()
+        results = []
+        stocks = []
+        for name in names:
+            results.append(pipe.process_file(DATA / name))
+            stocks.append(pipe.inventory.stock_levels())
+        elapsed = time.perf_counter() - t0
+        problems = [
+            f"{r.source_path.rsplit('/', 1)[-1]}={r.status}" for r in results if r.status != "paid"
+        ]
+        if tc_id == "TC-CASE-REV-01" and not problems:
+            if stocks[1]["GadgetX"] != start["GadgetX"] - 5:
+                problems.append("GadgetX delta != 5")
+            if any(stocks[1][k] != stocks[0][k] for k in ("WidgetA", "WidgetB")):
+                problems.append("second draw on unchanged lines")
+        if tc_id == "TC-CASE-TWIN-01" and not problems and stocks[1] != stocks[0]:
+            problems.append("twin drew stock again")
+        return {
+            "status": "paid" if not problems else "failed",
+            "issues": problems,
+            "soft": [],
+            "reflected": False,
+            "reason": "; ".join(problems) or "sequence ok",
+            "elapsed": round(elapsed, 2),
+        }
+
+
+def run_one(tc_id: str, body: str | tuple[str, ...], *, soft_bands: bool) -> dict:
+    if isinstance(body, tuple):
+        return run_seq(tc_id, body)
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         path = root / f"{tc_id}.txt"
